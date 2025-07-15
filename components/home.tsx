@@ -16,6 +16,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Message, Conversation } from "@/lib/schema"
 import ImageCollage from "@/components/image-collage"
 import TypingEffect from "@/components/typing-effect"
+import ApiStatus from "@/components/api-status"
+import { toast } from "sonner"
+import { Toaster } from "@/components/ui/sonner"
 
 // Simplified topic suggestions
 const TOPIC_SUGGESTIONS = [
@@ -250,7 +253,26 @@ export default function Home() {
       console.error("Streaming message send error:", error)
       setStreamingMessage("")
       setStreamingMessageId(null)
-      alert("Failed to send message. Check console for details.")
+      
+      // Show appropriate error message based on error type
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage.includes("All") && errorMessage.includes("API keys failed")) {
+        toast.error("All API keys have failed", {
+          description: "Please check your API keys and try again later.",
+          duration: 5000,
+        })
+      } else if (errorMessage.includes("quota") || errorMessage.includes("limit")) {
+        toast.warning("API limit reached", {
+          description: "Switching to backup API key automatically.",
+          duration: 3000,
+        })
+      } else {
+        toast.error("Failed to send message", {
+          description: "Please try again in a moment.",
+          duration: 3000,
+        })
+      }
     },
   })
 
@@ -355,7 +377,26 @@ export default function Home() {
       console.log("Streaming message sent successfully")
     } catch (error) {
       console.error("Error sending streaming message:", error)
-      alert("Error sending message: " + (error instanceof Error ? error.message : String(error)))
+      
+      // Show appropriate error message based on error type
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage.includes("All") && errorMessage.includes("API keys failed")) {
+        toast.error("All API keys have failed", {
+          description: "Please check your API keys and try again later.",
+          duration: 5000,
+        })
+      } else if (errorMessage.includes("quota") || errorMessage.includes("limit")) {
+        toast.warning("API limit reached", {
+          description: "Switching to backup API key automatically.",
+          duration: 3000,
+        })
+      } else {
+        toast.error("Failed to send message", {
+          description: "Please try again in a moment.",
+          duration: 3000,
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -654,6 +695,12 @@ export default function Home() {
           </form>
         </div>
       </div>
+      
+      {/* API Status Monitor */}
+      <ApiStatus />
+      
+      {/* Toast Notifications */}
+      <Toaster />
     </div>
   )
 }

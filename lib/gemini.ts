@@ -1,11 +1,109 @@
-// Direct API key - no environment variables
-const GOOGLE_API_KEY = "AIzaSyAOoY7jmqopJ5q34ELVyNViSPEtQ8WUDw0"
+// Multiple API keys for automatic fallback
+const GOOGLE_API_KEYS = [
+  "AIzaSyAOoY7jmqopJ5q34ELVyNViSPEtQ8WUDw0", // Original key
+  "AIzaSyArRtMxtNBzbUyzWn09HuYbPkCag59qfjU", // Fallback 1
+  "AIzaSyCDrjSPNGlOzVIBJdVDcMjMVePe7es4UwY", // Fallback 2
+  "AIzaSyAVhqmKXcEdP7q2W-0-mCKaSL1w3KLyKZY", // Fallback 3
+]
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system"
   content: string
   imageData?: string // Base64 encoded image data
   imageMimeType?: string // MIME type like image/jpeg, image/png
+}
+
+// Helper function to determine if error is retryable with different API key
+const isRetryableError = (error: any): boolean => {
+  if (typeof error === 'string') {
+    return error.includes('quota') || 
+           error.includes('rate') || 
+           error.includes('limit') ||
+           error.includes('429') ||
+           error.includes('503') ||
+           error.includes('502') ||
+           error.includes('500')
+  }
+  
+  if (error instanceof Error) {
+    return error.message.includes('quota') || 
+           error.message.includes('rate') || 
+           error.message.includes('limit') ||
+           error.message.includes('429') ||
+           error.message.includes('503') ||
+           error.message.includes('502') ||
+           error.message.includes('500')
+  }
+  
+  return false
+}
+
+// Helper function to make API request with fallback
+async function makeGeminiRequest(
+  endpoint: string,
+  requestBody: any,
+  isStreaming: boolean = false
+): Promise<Response> {
+  let lastError: any = null
+  
+  for (let i = 0; i < GOOGLE_API_KEYS.length; i++) {
+    const apiKey = GOOGLE_API_KEYS[i]
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:${endpoint}?key=${apiKey}`
+    
+    try {
+      console.log(`Trying API key ${i + 1}/${GOOGLE_API_KEYS.length} for ${endpoint}`)
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (response.ok) {
+        console.log(`✅ Successfully used API key ${i + 1}`)
+        return response
+      }
+
+      const errorText = await response.text()
+      const error = `API key ${i + 1} failed: ${response.status} - ${errorText}`
+      console.warn(error)
+      lastError = error
+      
+      // If it's a retryable error and we have more keys, try next one
+      if (isRetryableError(errorText) && i < GOOGLE_API_KEYS.length - 1) {
+        console.log(`⚠️ Retryable error with API key ${i + 1}, trying next key...`)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay
+        continue
+      }
+      
+      // If it's not retryable, throw immediately
+      if (!isRetryableError(errorText)) {
+        throw new Error(error)
+      }
+      
+    } catch (fetchError) {
+      const error = `API key ${i + 1} request failed: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+      console.warn(error)
+      lastError = error
+      
+      // If it's a retryable error and we have more keys, try next one
+      if (isRetryableError(fetchError) && i < GOOGLE_API_KEYS.length - 1) {
+        console.log(`⚠️ Retryable error with API key ${i + 1}, trying next key...`)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay
+        continue
+      }
+      
+      // If it's not retryable, throw immediately
+      if (!isRetryableError(fetchError)) {
+        throw new Error(error)
+      }
+    }
+  }
+  
+  // If we get here, all API keys failed
+  throw new Error(`All ${GOOGLE_API_KEYS.length} API keys failed. Last error: ${lastError}`)
 }
 
 export async function generateChatResponse(messages: ChatMessage[], systemPrompt?: string): Promise<string> {
@@ -65,24 +163,8 @@ When users send images, carefully analyze the image content and provide detailed
       },
     }
 
-    console.log("Making direct API call to Gemini...")
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    )
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Gemini API error response:", errorText)
-      throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
-    }
+    console.log("Making request with API key fallback...")
+    const response = await makeGeminiRequest("generateContent", requestBody, false)
 
     const data = await response.json()
     console.log("Gemini API response received:", data)
@@ -114,7 +196,7 @@ When users send images, carefully analyze the image content and provide detailed
   }
 }
 
-// New streaming function for real-time responses
+// Streaming function with API key fallback
 export async function generateStreamingChatResponse(messages: ChatMessage[], systemPrompt?: string): Promise<ReadableStream> {
   try {
     console.log("Generating streaming chat response with", messages.length, "messages")
@@ -172,24 +254,8 @@ When users send images, carefully analyze the image content and provide detailed
       },
     }
 
-    console.log("Making streaming API call to Gemini...")
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:streamGenerateContent?key=${GOOGLE_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    )
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Gemini streaming API error response:", errorText)
-      throw new Error(`Gemini streaming API error: ${response.status} - ${errorText}`)
-    }
+    console.log("Making streaming request with API key fallback...")
+    const response = await makeGeminiRequest("streamGenerateContent", requestBody, true)
 
     if (!response.body) {
       throw new Error("No response body received from Gemini streaming API")
@@ -251,21 +317,8 @@ export async function generateConversationTitle(firstMessage: string): Promise<s
       },
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      },
-    )
-
-    if (!response.ok) {
-      console.error("Error generating title:", await response.text())
-      return "New Conversation"
-    }
+    console.log("Generating conversation title with API key fallback...")
+    const response = await makeGeminiRequest("generateContent", requestBody, false)
 
     const data = await response.json()
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "New Conversation"
