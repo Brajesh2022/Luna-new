@@ -108,7 +108,9 @@ async function makeGeminiRequest(
 
 export async function generateChatResponse(messages: ChatMessage[], systemPrompt?: string): Promise<string> {
   try {
-    console.log("Generating chat response with", messages.length, "messages")
+    console.log("🚀 generateChatResponse called")
+    console.log("Messages:", messages.length)
+    console.log("System prompt:", systemPrompt ? "provided" : "default")
 
     // Convert messages to Gemini format
     const geminiMessages = messages.map((msg) => {
@@ -116,6 +118,7 @@ export async function generateChatResponse(messages: ChatMessage[], systemPrompt
       
       // Add image data if present
       if (msg.imageData && msg.imageMimeType) {
+        console.log("📸 Image data found, type:", msg.imageMimeType)
         parts.push({
           inline_data: {
             mime_type: msg.imageMimeType,
@@ -129,6 +132,8 @@ export async function generateChatResponse(messages: ChatMessage[], systemPrompt
         parts: parts
       }
     })
+
+    console.log("📝 Gemini messages prepared:", geminiMessages.length)
 
     const enhancedSystemPrompt = `${systemPrompt || "You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh."}
 
@@ -163,14 +168,21 @@ When users send images, carefully analyze the image content and provide detailed
       },
     }
 
-    console.log("Making request with API key fallback...")
+    console.log("📡 Making request with API key fallback...")
     const response = await makeGeminiRequest("generateContent", requestBody, false)
+    console.log("✅ Response received, status:", response.status)
 
     const data = await response.json()
-    console.log("Gemini API response received:", data)
+    console.log("📊 Response data structure:", {
+      hasCandidates: !!data.candidates,
+      candidatesLength: data.candidates?.length,
+      hasContent: !!data.candidates?.[0]?.content,
+      hasParts: !!data.candidates?.[0]?.content?.parts,
+      partsLength: data.candidates?.[0]?.content?.parts?.length,
+    })
 
     if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      console.error("Invalid response structure:", data)
+      console.error("❌ Invalid response structure:", data)
       throw new Error("Invalid response from Gemini API")
     }
 
@@ -179,18 +191,21 @@ When users send images, carefully analyze the image content and provide detailed
 
     // Clean up JSON response if it's wrapped in markdown code blocks
     if (responseText.includes("```json")) {
+      console.log("🧹 Cleaning up JSON response")
       responseText = responseText
         .replace(/```json\s*/g, "")
         .replace(/```\s*/g, "")
         .trim()
     }
 
-    console.log("Response text:", responseText.substring(0, 100) + "...")
+    console.log("📝 Final response length:", responseText.length)
+    console.log("📝 First 100 chars:", responseText.substring(0, 100))
 
     return responseText
   } catch (error) {
-    console.error("Gemini API error details:", error)
-    console.error("Error message:", error instanceof Error ? error.message : String(error))
+    console.error("❌ Gemini API error details:", error)
+    console.error("❌ Error message:", error instanceof Error ? error.message : String(error))
+    console.error("❌ Error stack:", error instanceof Error ? error.stack : "No stack")
 
     throw new Error(`Failed to generate AI response: ${error instanceof Error ? error.message : String(error)}`)
   }

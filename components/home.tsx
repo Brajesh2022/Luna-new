@@ -170,72 +170,118 @@ export default function Home() {
         payload.imageMimeType = imageMimeType
       }
       
-      const response = await fetch(`/api/conversations/${activeConversation}/messages/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      })
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-      
-      return response
-    },
-    onSuccess: async (response) => {
-      console.log("Streaming message send success")
-      
-      if (!response.body) {
-        throw new Error("No response body")
-      }
-      
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      
-      setStreamingMessage("")
-      setStreamingMessageId(Date.now())
-      
       try {
-        while (true) {
-          const { done, value } = await reader.read()
-          
-          if (done) {
-            console.log("Streaming complete")
-            break
-          }
-          
-          const chunk = decoder.decode(value, { stream: true })
-          const lines = chunk.split('\n')
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'user_message') {
-                  // Add user message to local state
-                  setLocalMessages(prev => [...prev, data.message])
-                } else if (data.type === 'stream_chunk') {
-                  // Update streaming message
-                  setStreamingMessage(prev => prev + data.chunk)
-                } else if (data.type === 'assistant_message_complete') {
-                  // Replace streaming message with final message
-                  setStreamingMessage("")
-                  setStreamingMessageId(null)
-                  setLocalMessages(prev => [...prev, data.message])
+        const response = await fetch(`/api/conversations/${activeConversation}/messages/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("Streaming API error:", response.status, errorText)
+          throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`)
+        }
+        
+        return { type: 'stream', response }
+      } catch (streamError) {
+        console.warn("Streaming failed, falling back to regular API:", streamError)
+        
+        // Fallback to regular API
+        const response = await apiRequest("POST", `/api/conversations/${activeConversation}/messages`, payload)
+        const data = await response.json()
+        return { type: 'regular', data }
+      }
+    },
+    onSuccess: async (result) => {
+      console.log("Message send success, type:", result.type)
+      
+      if (result.type === 'stream') {
+        // Handle streaming response
+        const response = result.response
+        
+        if (!response.body) {
+          console.error("No response body")
+          throw new Error("No response body")
+        }
+        
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        
+        setStreamingMessage("")
+        setStreamingMessageId(Date.now())
+        
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            
+            if (done) {
+              console.log("Streaming complete")
+              break
+            }
+            
+            const chunk = decoder.decode(value, { stream: true })
+            console.log("Received chunk:", chunk)
+            const lines = chunk.split('\n')
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6))
+                  console.log("Parsed data:", data)
+                  
+                  if (data.type === 'user_message') {
+                    // Add user message to local state
+                    console.log("Adding user message:", data.message)
+                    setLocalMessages(prev => [...prev, data.message])
+                  } else if (data.type === 'stream_chunk') {
+                    // Update streaming message
+                    setStreamingMessage(prev => prev + data.chunk)
+                  } else if (data.type === 'assistant_message_complete') {
+                    // Replace streaming message with final message
+                    console.log("Streaming complete, adding final message:", data.message)
+                    setStreamingMessage("")
+                    setStreamingMessageId(null)
+                    setLocalMessages(prev => [...prev, data.message])
+                  }
+                } catch (e) {
+                  console.error('Error parsing streaming data:', e, 'Line:', line)
                 }
-              } catch (e) {
-                console.error('Error parsing streaming data:', e)
               }
             }
           }
+        } catch (error) {
+          console.error('Error reading stream:', error)
+        } finally {
+          reader.releaseLock()
         }
-      } catch (error) {
-        console.error('Error reading stream:', error)
-      } finally {
-        reader.releaseLock()
+      } else {
+        // Handle regular API response
+        const data = result.data
+        console.log("Regular API response:", data)
+        
+        if (data.userMessage && data.assistantMessage) {
+          setLocalMessages(prev => [...prev, data.userMessage, data.assistantMessage])
+          
+          // Simulate typing effect for regular response
+          setStreamingMessage("")
+          setStreamingMessageId(Date.now())
+          
+          let index = 0
+          const content = data.assistantMessage.content
+          const typingInterval = setInterval(() => {
+            if (index < content.length) {
+              setStreamingMessage(prev => prev + content[index])
+              index++
+            } else {
+              clearInterval(typingInterval)
+              setStreamingMessage("")
+              setStreamingMessageId(null)
+            }
+          }, 20)
+        }
       }
       
       // Refresh messages from server
@@ -250,7 +296,7 @@ export default function Home() {
       setShowSuggestions(false)
     },
     onError: (error) => {
-      console.error("Streaming message send error:", error)
+      console.error("Message send error:", error)
       setStreamingMessage("")
       setStreamingMessageId(null)
       
@@ -414,6 +460,31 @@ export default function Home() {
     setShowSuggestions(false)
   }
 
+  // Test API function
+  const testAPI = async () => {
+    console.log("Testing API...")
+    try {
+      const response = await fetch('/api/test-gemini')
+      const result = await response.json()
+      console.log("API test result:", result)
+      
+      if (result.success) {
+        toast.success("API test successful!", {
+          description: "Gemini API is working correctly.",
+        })
+      } else {
+        toast.error("API test failed", {
+          description: result.error,
+        })
+      }
+    } catch (error) {
+      console.error("API test error:", error)
+      toast.error("API test failed", {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+
   const isImageGenerationResponse = (content: string) => {
     try {
       let cleanContent = content
@@ -468,15 +539,25 @@ export default function Home() {
             <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
           </div>
         </div>
-        <Button
-          onClick={handleNewConversation}
-          variant="ghost"
-          size="sm"
-          className="text-white/80 hover:text-white hover:bg-white/10"
-        >
-          <PlusCircle className="w-4 h-4 mr-2" />
-          New Chat
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={testAPI}
+            variant="ghost"
+            size="sm"
+            className="text-white/80 hover:text-white hover:bg-white/10"
+          >
+            Test API
+          </Button>
+          <Button
+            onClick={handleNewConversation}
+            variant="ghost"
+            size="sm"
+            className="text-white/80 hover:text-white hover:bg-white/10"
+          >
+            <PlusCircle className="w-4 h-4 mr-2" />
+            New Chat
+          </Button>
+        </div>
       </header>
 
       {/* Main Content */}

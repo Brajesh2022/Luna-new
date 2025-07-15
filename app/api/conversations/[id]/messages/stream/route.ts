@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { storage } from "@/lib/storage"
 import { insertMessageSchema } from "@/lib/schema"
-import { generateStreamingChatResponse, generateConversationTitle } from "@/lib/gemini"
+import { generateChatResponse, generateConversationTitle } from "@/lib/gemini"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -48,11 +48,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Generate AI response with context
     const systemPrompt = `You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh.`
 
-    console.log("Calling generateStreamingChatResponse...")
-    const responseStream = await generateStreamingChatResponse(chatHistory, systemPrompt)
+    console.log("Generating AI response...")
+    
+    // Use regular API call instead of streaming for now (more reliable)
+    const aiResponse = await generateChatResponse(chatHistory, systemPrompt)
+    console.log("AI response generated, length:", aiResponse.length)
 
-    // Create a readable stream that will collect the complete response
-    let fullResponse = ""
+    // Save AI response
+    const assistantMessage = await storage.createMessage({
+      conversationId,
+      role: "assistant",
+      content: aiResponse,
+    })
+    console.log("Assistant message saved:", assistantMessage.id)
+
+    // Create a simple streaming response that simulates typing
     const encoder = new TextEncoder()
     
     const readableStream = new ReadableStream({
@@ -64,73 +74,50 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(userMessageData)}\n\n`))
         
-        // Send assistant message placeholder
-        const assistantMessagePlaceholder = {
-          type: "assistant_message_start",
-          messageId: Date.now(), // Temporary ID
-        }
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(assistantMessagePlaceholder)}\n\n`))
-      },
-      
-      async pull(controller) {
-        try {
-          const reader = responseStream.getReader()
-          
-          while (true) {
-            const { done, value } = await reader.read()
-            
-            if (done) {
-              // Save the complete response to the database
-              const assistantMessage = await storage.createMessage({
-                conversationId,
-                role: "assistant",
-                content: fullResponse,
-              })
-              
-              // Send the final complete message
-              const finalMessage = {
-                type: "assistant_message_complete",
-                message: assistantMessage,
-              }
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalMessage)}\n\n`))
-              
-              // If this is the first message, update the conversation title
-              if (messages.length === 1) {
-                try {
-                  const title = await generateConversationTitle(content)
-                  console.log("Generated title:", title)
-                } catch (error) {
-                  console.error("Error generating title:", error)
-                }
-              }
-              
-              controller.close()
-              break
-            }
-            
-            // Decode and accumulate the response
-            const chunk = new TextDecoder().decode(value)
-            fullResponse += chunk
-            
-            // Send the streaming chunk
+        // Start streaming the response character by character
+        let index = 0
+        const streamInterval = setInterval(() => {
+          if (index < aiResponse.length) {
+            const char = aiResponse[index]
             const streamData = {
               type: "stream_chunk",
-              chunk: chunk,
+              chunk: char,
             }
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamData)}\n\n`))
+            index++
+          } else {
+            // Send the final complete message
+            const finalMessage = {
+              type: "assistant_message_complete",
+              message: assistantMessage,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalMessage)}\n\n`))
+            
+            clearInterval(streamInterval)
+            controller.close()
           }
-        } catch (error) {
-          console.error("Error in streaming:", error)
-          controller.error(error)
-        }
+        }, 20) // Stream characters every 20ms for smooth animation
       },
     })
+
+    // If this is the first message, update the conversation title
+    if (messages.length === 1) {
+      try {
+        const title = await generateConversationTitle(content)
+        console.log("Generated title:", title)
+      } catch (error) {
+        console.error("Error generating title:", error)
+      }
+    }
 
     return new Response(readableStream, {
       headers: {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "Content-Type",
       },
     })
   } catch (error) {
