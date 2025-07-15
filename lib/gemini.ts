@@ -1,0 +1,139 @@
+// Direct API key - no environment variables
+const GOOGLE_API_KEY = "AIzaSyAOoY7jmqopJ5q34ELVyNViSPEtQ8WUDw0"
+
+export interface ChatMessage {
+  role: "user" | "assistant" | "system"
+  content: string
+}
+
+export async function generateChatResponse(messages: ChatMessage[], systemPrompt?: string): Promise<string> {
+  try {
+    console.log("Generating chat response with", messages.length, "messages")
+
+    // Convert messages to Gemini format
+    const geminiMessages = messages.map((msg) => ({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    }))
+
+    const enhancedSystemPrompt = `${systemPrompt || "You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh."}
+
+IMPORTANT IMAGE GENERATION INSTRUCTIONS:
+When a user asks you to generate, create, make, or produce images, photos, pictures, or any visual content, you MUST respond with a JSON object containing exactly 4 image prompts. Follow this exact format:
+
+{
+  "type": "image_generation",
+  "prompts": [
+    "detailed prompt 1",
+    "detailed prompt 2", 
+    "detailed prompt 3",
+    "detailed prompt 4"
+  ]
+}
+
+Create 4 diverse, detailed prompts based on the user's request. Each prompt should be specific, descriptive, and optimized for image generation. Include artistic styles, lighting, composition details, and visual elements that would create high-quality, varied images.
+
+CRITICAL: For image generation requests, respond ONLY with the raw JSON object. Do NOT wrap it in markdown code blocks, backticks, or any other formatting. Do NOT include any other text, explanations, or commentary - just the plain JSON object.`
+
+    const requestBody = {
+      contents: geminiMessages,
+      systemInstruction: {
+        parts: [{ text: enhancedSystemPrompt }],
+      },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      },
+    }
+
+    console.log("Making direct API call to Gemini...")
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      },
+    )
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error("Gemini API error response:", errorText)
+      throw new Error(`Gemini API error: ${response.status} - ${errorText}`)
+    }
+
+    const data = await response.json()
+    console.log("Gemini API response received:", data)
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.error("Invalid response structure:", data)
+      throw new Error("Invalid response from Gemini API")
+    }
+
+    let responseText =
+      data.candidates[0].content.parts[0].text || "I apologize, but I couldn't generate a response. Please try again."
+
+    // Clean up JSON response if it's wrapped in markdown code blocks
+    if (responseText.includes("```json")) {
+      responseText = responseText
+        .replace(/```json\s*/g, "")
+        .replace(/```\s*/g, "")
+        .trim()
+    }
+
+    console.log("Response text:", responseText.substring(0, 100) + "...")
+
+    return responseText
+  } catch (error) {
+    console.error("Gemini API error details:", error)
+    console.error("Error message:", error instanceof Error ? error.message : String(error))
+
+    throw new Error(`Failed to generate AI response: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+export async function generateConversationTitle(firstMessage: string): Promise<string> {
+  try {
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Generate a brief, descriptive title (max 5 words) for a conversation that starts with the following message. Respond only with the title, no quotes or extra text: "${firstMessage}"`,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.5,
+        maxOutputTokens: 20,
+      },
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      },
+    )
+
+    if (!response.ok) {
+      console.error("Error generating title:", await response.text())
+      return "New Conversation"
+    }
+
+    const data = await response.json()
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "New Conversation"
+  } catch (error) {
+    console.error("Error generating conversation title:", error)
+    return "New Conversation"
+  }
+}
