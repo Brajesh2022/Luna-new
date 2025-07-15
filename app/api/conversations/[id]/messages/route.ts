@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { storage } from "@/lib/storage"
 import { insertMessageSchema } from "@/lib/schema"
-import { generateChatResponse, generateConversationTitle } from "@/lib/gemini"
+import { generateChatResponse, generateStreamingChatResponse, generateConversationTitle } from "@/lib/gemini"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -30,8 +30,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const body = await request.json()
     console.log("Request body:", body)
 
-    const { content } = insertMessageSchema.omit({ conversationId: true, role: true }).parse(body)
+    const { content, imageData, imageMimeType } = insertMessageSchema.omit({ conversationId: true, role: true }).parse(body)
     console.log("Parsed content:", content)
+    console.log("Has image data:", !!imageData)
 
     // Check if conversation exists
     const conversation = await storage.getConversation(conversationId)
@@ -39,11 +40,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
     }
 
-    // Save user message
+    // Save user message (with image data if present)
     const userMessage = await storage.createMessage({
       conversationId,
       role: "user",
       content,
+      imageData,
+      imageMimeType,
     })
     console.log("User message saved:", userMessage.id)
 
@@ -52,6 +55,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const chatHistory = messages.map((msg) => ({
       role: msg.role as "user" | "assistant",
       content: msg.content,
+      imageData: msg.imageData || undefined,
+      imageMimeType: msg.imageMimeType || undefined,
     }))
     console.log("Chat history length:", chatHistory.length)
 

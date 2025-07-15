@@ -38,6 +38,8 @@ export default function Home() {
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null)
   const [typingMessageId, setTypingMessageId] = useState<number | null>(null)
   const [localMessages, setLocalMessages] = useState<Message[]>([])
+  const [streamingMessage, setStreamingMessage] = useState<string>("")
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -75,7 +77,7 @@ export default function Home() {
 
     const timeoutId = setTimeout(scrollToBottom, 100)
     return () => clearTimeout(timeoutId)
-  }, [allMessages, isLoading])
+  }, [allMessages, isLoading, streamingMessage])
 
   // Focus input on load
   useEffect(() => {
@@ -95,6 +97,8 @@ export default function Home() {
     if (activeConversation) {
       console.log("Active conversation changed, refetching messages for:", activeConversation)
       setLocalMessages([]) // Clear local messages
+      setStreamingMessage("") // Clear streaming message
+      setStreamingMessageId(null)
       refetchMessages()
     }
   }, [activeConversation, refetchMessages])
@@ -115,6 +119,21 @@ export default function Home() {
       window.removeEventListener("orientationchange", setVH)
     }
   }, [])
+
+  // Helper function to convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = () => {
+        const result = reader.result as string
+        // Remove the data URL prefix to get just the base64 data
+        const base64Data = result.split(',')[1]
+        resolve(base64Data)
+      }
+      reader.onerror = error => reject(error)
+    })
+  }
 
   // Create conversation mutation
   const createConversationMutation = useMutation({
@@ -137,41 +156,100 @@ export default function Home() {
     },
   })
 
-  // Send message mutation
-  const sendMessageMutation = useMutation({
-    mutationFn: async (content: string) => {
-      console.log("Sending message:", content, "to conversation:", activeConversation)
-      const response = await apiRequest("POST", `/api/conversations/${activeConversation}/messages`, { content })
-      const data = await response.json()
-      console.log("Message response received:", data)
-      return data
-    },
-    onSuccess: (data) => {
-      console.log("Message send success:", data)
-
-      // Add messages to local state immediately
-      if (data.userMessage && data.assistantMessage) {
-        setLocalMessages((prev) => [...prev, data.userMessage, data.assistantMessage])
-
-        // Start typing effect for the new assistant message
-        console.log("Starting typing effect for message:", data.assistantMessage.id)
-        setTypingMessageId(data.assistantMessage.id)
+  // Streaming message mutation
+  const sendStreamingMessageMutation = useMutation({
+    mutationFn: async ({ content, imageData, imageMimeType }: { content: string; imageData?: string; imageMimeType?: string }) => {
+      console.log("Sending streaming message:", content, "to conversation:", activeConversation)
+      
+      const payload: any = { content }
+      if (imageData && imageMimeType) {
+        payload.imageData = imageData
+        payload.imageMimeType = imageMimeType
       }
-
-      // Also invalidate and refetch server data
+      
+      const response = await fetch(`/api/conversations/${activeConversation}/messages/stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
+      return response
+    },
+    onSuccess: async (response) => {
+      console.log("Streaming message send success")
+      
+      if (!response.body) {
+        throw new Error("No response body")
+      }
+      
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      
+      setStreamingMessage("")
+      setStreamingMessageId(Date.now())
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          
+          if (done) {
+            console.log("Streaming complete")
+            break
+          }
+          
+          const chunk = decoder.decode(value, { stream: true })
+          const lines = chunk.split('\n')
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6))
+                
+                if (data.type === 'user_message') {
+                  // Add user message to local state
+                  setLocalMessages(prev => [...prev, data.message])
+                } else if (data.type === 'stream_chunk') {
+                  // Update streaming message
+                  setStreamingMessage(prev => prev + data.chunk)
+                } else if (data.type === 'assistant_message_complete') {
+                  // Replace streaming message with final message
+                  setStreamingMessage("")
+                  setStreamingMessageId(null)
+                  setLocalMessages(prev => [...prev, data.message])
+                }
+              } catch (e) {
+                console.error('Error parsing streaming data:', e)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error reading stream:', error)
+      } finally {
+        reader.releaseLock()
+      }
+      
+      // Refresh messages from server
       queryClient.invalidateQueries({
         queryKey: ["/api/conversations", activeConversation, "messages"],
       })
-
-      // Force refetch after a short delay
+      
       setTimeout(() => {
         refetchMessages()
       }, 500)
-
+      
       setShowSuggestions(false)
     },
     onError: (error) => {
-      console.error("Message send error:", error)
+      console.error("Streaming message send error:", error)
+      setStreamingMessage("")
+      setStreamingMessageId(null)
       alert("Failed to send message. Check console for details.")
     },
   })
@@ -245,15 +323,18 @@ export default function Home() {
       setActiveConversation(newConversation.id)
       // Wait a bit for the conversation to be set
       setTimeout(() => {
-        sendMessageMutation.mutate(input)
+        handleStreamingSubmit()
       }, 100)
-      setInput("")
-      removeImage()
       return
     }
 
+    await handleStreamingSubmit()
+  }
+
+  const handleStreamingSubmit = async () => {
     setIsLoading(true)
     const content = input
+    const imageFile = selectedImage
     setInput("")
     removeImage()
 
@@ -261,11 +342,19 @@ export default function Home() {
     inputRef.current?.blur()
 
     try {
-      console.log("Sending message mutation...")
-      await sendMessageMutation.mutateAsync(content)
-      console.log("Message sent successfully")
+      let imageData: string | undefined
+      let imageMimeType: string | undefined
+      
+      if (imageFile) {
+        imageData = await fileToBase64(imageFile)
+        imageMimeType = imageFile.type
+      }
+
+      console.log("Sending streaming message mutation...")
+      await sendStreamingMessageMutation.mutateAsync({ content, imageData, imageMimeType })
+      console.log("Streaming message sent successfully")
     } catch (error) {
-      console.error("Error sending message:", error)
+      console.error("Error sending streaming message:", error)
       alert("Error sending message: " + (error instanceof Error ? error.message : String(error)))
     } finally {
       setIsLoading(false)
@@ -353,7 +442,7 @@ export default function Home() {
       <div className="flex-1 flex flex-col mobile-content">
         {/* Messages */}
         <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin">
-          {allMessages.length === 0 && showSuggestions ? (
+          {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full space-y-8">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
                 <Avatar className="w-20 h-20 mx-auto mb-4">
@@ -397,19 +486,21 @@ export default function Home() {
                         message.role === "user" ? "user-message text-white" : "assistant-message text-white",
                       )}
                     >
+                      {message.role === "user" && message.imageData && (
+                        <div className="mb-3">
+                          <img
+                            src={`data:${message.imageMimeType};base64,${message.imageData}`}
+                            alt="Uploaded image"
+                            className="max-w-xs max-h-48 object-contain rounded-lg border-2 border-white/20"
+                          />
+                        </div>
+                      )}
+                      
                       {message.role === "assistant" && isImageGenerationResponse(message.content) ? (
                         <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
                       ) : (
                         <div className="markdown-content">
-                          {message.role === "assistant" && typingMessageId === message.id ? (
-                            <TypingEffect
-                              text={message.content}
-                              onComplete={() => setTypingMessageId(null)}
-                              renderers={renderers}
-                            />
-                          ) : (
-                            <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
-                          )}
+                          <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
                         </div>
                       )}
 
@@ -432,10 +523,30 @@ export default function Home() {
                   </motion.div>
                 )
               })}
+              
+              {/* Streaming message */}
+              {streamingMessageId && streamingMessage && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex gap-4 justify-start"
+                >
+                  <Avatar className="w-8 h-8 flex-shrink-0">
+                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                    <AvatarFallback>L</AvatarFallback>
+                  </Avatar>
+                  <div className="glass-morphism p-4 rounded-2xl bg-black/20 text-white">
+                    <div className="markdown-content">
+                      <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
+                      <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </AnimatePresence>
           )}
 
-          {(isLoading || sendMessageMutation.isPending) && (
+          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -448,7 +559,7 @@ export default function Home() {
               <div className="glass-morphism p-4 rounded-2xl bg-black/20">
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  <span className="text-white/80">Luna is thinking...</span>
+                  <span className="text-white/80">Luna is connecting...</span>
                 </div>
               </div>
             </motion.div>
@@ -531,10 +642,10 @@ export default function Home() {
 
             <Button
               type="submit"
-              disabled={isLoading || sendMessageMutation.isPending || (!input.trim() && !selectedImage)}
+              disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
               className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading || sendMessageMutation.isPending ? (
+              {isLoading || sendStreamingMessageMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Send className="w-4 h-4" />
