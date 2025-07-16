@@ -407,7 +407,7 @@ export default function Home() {
                 setStreamingMessage("")
                 setStreamingMessageId(null)
               }
-            }, 20)
+            }, 15)
           }
         }
       }
@@ -744,9 +744,9 @@ export default function Home() {
                       <ImageGenerationAnimation isVisible={isCreatingImages} />
                     ) : (
                       <div className="p-4">
-                        <div className="markdown-content">
+                        <div className="markdown-content streaming-text">
                           <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
-                          <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                          <span className="typing-cursor">|</span>
                         </div>
                       </div>
                     )}

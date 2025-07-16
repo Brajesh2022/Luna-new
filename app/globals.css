@@ -488,3 +488,44 @@ textarea {
   background-size: 200% auto;
   animation: shine 3s linear infinite;
 }
+
+/* Typing cursor animation */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.typing-cursor {
+  color: rgba(124, 58, 237, 0.8);
+  font-weight: 400;
+  animation: blink 1s infinite;
+  margin-left: 1px;
+  font-family: monospace;
+  font-size: 1em;
+  line-height: 1.6;
+  display: inline;
+}
+
+/* Streaming text styling */
+.streaming-text {
+  display: inline-block;
+  width: 100%;
+}
+
+.streaming-text > * {
+  display: inline;
+}
+
+.streaming-text p {
+  display: inline;
+  margin: 0;
+}
+
+.streaming-text p:not(:last-child)::after {
+  content: "\A";
+  white-space: pre;
+}
