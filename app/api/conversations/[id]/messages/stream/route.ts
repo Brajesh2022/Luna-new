@@ -1,26 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { storage } from "@/lib/storage"
 import { insertMessageSchema } from "@/lib/schema"
-import { generateChatResponse, generateStreamingChatResponse, generateConversationTitle } from "@/lib/gemini"
-
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
-  try {
-    const conversationId = Number.parseInt(params.id)
-    if (isNaN(conversationId)) {
-      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
-    }
-
-    const messages = await storage.getConversationMessages(conversationId)
-    return NextResponse.json(messages)
-  } catch (error) {
-    console.error("Error fetching messages:", error)
-    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 })
-  }
-}
+import { generateChatResponse, generateConversationTitle } from "@/lib/gemini"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    console.log("POST /api/conversations/[id]/messages called")
+    console.log("POST /api/conversations/[id]/messages/stream called")
 
     const conversationId = Number.parseInt(params.id)
     if (isNaN(conversationId)) {
@@ -63,7 +48,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Generate AI response with context
     const systemPrompt = `You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh.`
 
-    console.log("Calling generateChatResponse...")
+    console.log("Generating AI response...")
+    
+    // Use regular API call instead of streaming for now (more reliable)
     const aiResponse = await generateChatResponse(chatHistory, systemPrompt)
     console.log("AI response generated, length:", aiResponse.length)
 
@@ -75,6 +62,44 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     })
     console.log("Assistant message saved:", assistantMessage.id)
 
+    // Create a simple streaming response that simulates typing
+    const encoder = new TextEncoder()
+    
+    const readableStream = new ReadableStream({
+      start(controller) {
+        // Send the user message immediately
+        const userMessageData = {
+          type: "user_message",
+          message: userMessage,
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(userMessageData)}\n\n`))
+        
+        // Start streaming the response character by character
+        let index = 0
+        const streamInterval = setInterval(() => {
+          if (index < aiResponse.length) {
+            const char = aiResponse[index]
+            const streamData = {
+              type: "stream_chunk",
+              chunk: char,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamData)}\n\n`))
+            index++
+          } else {
+            // Send the final complete message
+            const finalMessage = {
+              type: "assistant_message_complete",
+              message: assistantMessage,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalMessage)}\n\n`))
+            
+            clearInterval(streamInterval)
+            controller.close()
+          }
+        }, 20) // Stream characters every 20ms for smooth animation
+      },
+    })
+
     // If this is the first message, update the conversation title
     if (messages.length === 1) {
       try {
@@ -85,20 +110,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     }
 
-    const response = {
-      userMessage,
-      assistantMessage,
-    }
-
-    console.log("Returning response")
-    return NextResponse.json(response)
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    })
   } catch (error) {
-    console.error("Error processing message - Full error:", error)
+    console.error("Error processing streaming message - Full error:", error)
     console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace")
 
     return NextResponse.json(
       {
-        error: "Failed to process message",
+        error: "Failed to process streaming message",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },

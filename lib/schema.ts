@@ -14,6 +14,8 @@ export const insertMessageSchema = z.object({
   conversationId: z.number(),
   role: z.string(),
   content: z.string(),
+  imageData: z.string().optional(), // Base64 encoded image data
+  imageMimeType: z.string().optional(), // MIME type like image/jpeg, image/png
 })
 
 export type InsertUser = z.infer<typeof insertUserSchema>
@@ -37,5 +39,7 @@ export type Message = {
   conversationId: number
   role: string
   content: string
+  imageData?: string | null
+  imageMimeType?: string | null
   createdAt: Date
 }
