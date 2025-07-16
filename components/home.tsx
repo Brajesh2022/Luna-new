@@ -43,6 +43,7 @@ export default function Home() {
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [streamingMessage, setStreamingMessage] = useState<string>("")
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
+  const [isCreatingImages, setIsCreatingImages] = useState(false)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -75,7 +76,13 @@ export default function Home() {
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: "smooth", 
+          block: "end",
+          inline: "nearest"
+        })
+      }
     }
 
     const timeoutId = setTimeout(scrollToBottom, 100)
@@ -136,6 +143,24 @@ export default function Home() {
       }
       reader.onerror = error => reject(error)
     })
+  }
+
+  // Helper function to detect if response is image generation
+  const isImageGenerationContent = (content: string): boolean => {
+    try {
+      let cleanContent = content
+      if (content.includes("```json")) {
+        cleanContent = content
+          .replace(/```json\s*/g, "")
+          .replace(/```\s*/g, "")
+          .trim()
+      }
+      
+      const parsed = JSON.parse(cleanContent)
+      return parsed.type === "image_generation" && Array.isArray(parsed.prompts)
+    } catch {
+      return false
+    }
   }
 
   // Create conversation mutation
@@ -236,15 +261,23 @@ export default function Home() {
                     // Add user message to local state
                     console.log("Adding user message:", data.message)
                     setLocalMessages(prev => [...prev, data.message])
-                  } else if (data.type === 'stream_chunk') {
-                    // Update streaming message
-                    setStreamingMessage(prev => prev + data.chunk)
-                  } else if (data.type === 'assistant_message_complete') {
-                    // Replace streaming message with final message
-                    console.log("Streaming complete, adding final message:", data.message)
-                    setStreamingMessage("")
-                    setStreamingMessageId(null)
-                    setLocalMessages(prev => [...prev, data.message])
+                                  } else if (data.type === 'stream_chunk') {
+                  // Update streaming message
+                  setStreamingMessage(prev => {
+                    const newContent = prev + data.chunk
+                    // Check if this is image generation content
+                    if (isImageGenerationContent(newContent)) {
+                      setIsCreatingImages(true)
+                    }
+                    return newContent
+                  })
+                } else if (data.type === 'assistant_message_complete') {
+                                      // Replace streaming message with final message
+                  console.log("Streaming complete, adding final message:", data.message)
+                  setStreamingMessage("")
+                  setStreamingMessageId(null)
+                  setIsCreatingImages(false)
+                  setLocalMessages(prev => [...prev, data.message])
                   }
                 } catch (e) {
                   console.error('Error parsing streaming data:', e, 'Line:', line)
@@ -265,12 +298,23 @@ export default function Home() {
         if (data.userMessage && data.assistantMessage) {
           setLocalMessages(prev => [...prev, data.userMessage, data.assistantMessage])
           
-          // Simulate typing effect for regular response
-          setStreamingMessage("")
-          setStreamingMessageId(Date.now())
-          
+                  // Simulate typing effect for regular response
+        setStreamingMessage("")
+        setStreamingMessageId(Date.now())
+        
+        // Check if this is image generation content
+        const content = data.assistantMessage.content
+        if (isImageGenerationContent(content)) {
+          setIsCreatingImages(true)
+          // For image generation, just show loading and then complete
+          setTimeout(() => {
+            setStreamingMessage("")
+            setStreamingMessageId(null)
+            setIsCreatingImages(false)
+          }, 2000) // Show creating for 2 seconds
+        } else {
+          // Regular typing animation
           let index = 0
-          const content = data.assistantMessage.content
           const typingInterval = setInterval(() => {
             if (index < content.length) {
               setStreamingMessage(prev => prev + content[index])
@@ -281,6 +325,7 @@ export default function Home() {
               setStreamingMessageId(null)
             }
           }, 20)
+        }
         }
       }
       
@@ -299,6 +344,7 @@ export default function Home() {
       console.error("Message send error:", error)
       setStreamingMessage("")
       setStreamingMessageId(null)
+      setIsCreatingImages(false)
       
       // Show appropriate error message based on error type
       const errorMessage = error instanceof Error ? error.message : String(error)
@@ -401,6 +447,7 @@ export default function Home() {
 
   const handleStreamingSubmit = async () => {
     setIsLoading(true)
+    setIsCreatingImages(false)
     const content = input
     const imageFile = selectedImage
     setInput("")
@@ -460,48 +507,6 @@ export default function Home() {
     setShowSuggestions(false)
   }
 
-  // Test API function
-  const testAPI = async () => {
-    console.log("Testing API...")
-    try {
-      const response = await fetch('/api/test-gemini')
-      const result = await response.json()
-      console.log("API test result:", result)
-      
-      if (result.success) {
-        toast.success("API test successful!", {
-          description: "Gemini API is working correctly.",
-        })
-      } else {
-        toast.error("API test failed", {
-          description: result.error,
-        })
-      }
-    } catch (error) {
-      console.error("API test error:", error)
-      toast.error("API test failed", {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-
-  const isImageGenerationResponse = (content: string) => {
-    try {
-      let cleanContent = content
-      if (content.includes("```json")) {
-        cleanContent = content
-          .replace(/```json\s*/g, "")
-          .replace(/```\s*/g, "")
-          .trim()
-      }
-
-      const parsed = JSON.parse(cleanContent)
-      return parsed.type === "image_generation" && Array.isArray(parsed.prompts) && parsed.prompts.length === 4
-    } catch {
-      return false
-    }
-  }
-
   const getImagePrompts = (content: string) => {
     try {
       let cleanContent = content
@@ -538,16 +543,7 @@ export default function Home() {
             <h1 className="text-white font-semibold text-lg">Luna</h1>
             <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={testAPI}
-            variant="ghost"
-            size="sm"
-            className="text-white/80 hover:text-white hover:bg-white/10"
-          >
-            Test API
-          </Button>
+                  </div>
           <Button
             onClick={handleNewConversation}
             variant="ghost"
@@ -557,13 +553,12 @@ export default function Home() {
             <PlusCircle className="w-4 h-4 mr-2" />
             New Chat
           </Button>
-        </div>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col mobile-content">
         {/* Messages */}
-        <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin">
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" style={{ paddingBottom: '100px' }}>
           {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full space-y-8">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -618,7 +613,7 @@ export default function Home() {
                         </div>
                       )}
                       
-                      {message.role === "assistant" && isImageGenerationResponse(message.content) ? (
+                      {message.role === "assistant" && isImageGenerationContent(message.content) ? (
                         <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
                       ) : (
                         <div className="markdown-content">
@@ -647,7 +642,7 @@ export default function Home() {
               })}
               
               {/* Streaming message */}
-              {streamingMessageId && streamingMessage && (
+              {streamingMessageId && (streamingMessage || isCreatingImages) && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -658,17 +653,24 @@ export default function Home() {
                     <AvatarFallback>L</AvatarFallback>
                   </Avatar>
                   <div className="glass-morphism p-4 rounded-2xl bg-black/20 text-white">
-                    <div className="markdown-content">
-                      <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
-                      <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
-                    </div>
+                    {isCreatingImages ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                        <span className="text-white/80">Creating images...</span>
+                      </div>
+                    ) : (
+                      <div className="markdown-content">
+                        <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
+                        <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
             </AnimatePresence>
           )}
 
-          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && (
+          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -681,7 +683,7 @@ export default function Home() {
               <div className="glass-morphism p-4 rounded-2xl bg-black/20">
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  <span className="text-white/80">Luna is connecting...</span>
+                  <span className="text-white/80">Luna is thinking...</span>
                 </div>
               </div>
             </motion.div>
