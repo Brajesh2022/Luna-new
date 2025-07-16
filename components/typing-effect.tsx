@@ -10,7 +10,7 @@ interface TypingEffectProps {
   renderers?: any
 }
 
-export default function TypingEffect({ text, speed = 15, onComplete, renderers }: TypingEffectProps) {
+export default function TypingEffect({ text, speed = 10, onComplete, renderers }: TypingEffectProps) {
   const [displayedText, setDisplayedText] = useState("")
   const [currentIndex, setCurrentIndex] = useState(0)
 

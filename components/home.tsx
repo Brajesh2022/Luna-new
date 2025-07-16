@@ -407,7 +407,7 @@ export default function Home() {
                 setStreamingMessage("")
                 setStreamingMessageId(null)
               }
-            }, 15)
+            }, 10)
           }
         }
       }
@@ -644,7 +644,7 @@ export default function Home() {
         <div 
           ref={chatContainerRef} 
           className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" 
-          style={{ paddingBottom: '100px' }}
+          style={{ paddingBottom: '60px' }}
         >
           {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full space-y-8">
@@ -744,9 +744,8 @@ export default function Home() {
                       <ImageGenerationAnimation isVisible={isCreatingImages} />
                     ) : (
                       <div className="p-4">
-                        <div className="markdown-content streaming-text">
-                          <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
-                          <span className="typing-cursor">|</span>
+                        <div className="markdown-content">
+                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
                         </div>
                       </div>
                     )}

@@ -424,9 +424,9 @@ body {
 
   .mobile-content {
     /* Account for fixed header and input */
-    padding-top: calc(100px + env(safe-area-inset-top));
-    padding-bottom: calc(100px + env(safe-area-inset-bottom));
-    height: calc(100vh - 200px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding-top: calc(110px + env(safe-area-inset-top));
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+    height: calc(100vh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -508,6 +508,29 @@ textarea {
   font-size: 1em;
   line-height: 1.6;
   display: inline;
+}
+
+/* Animate the cursor character directly */
+.markdown-content p:last-child::after {
+  content: "";
+  animation: blink 1s infinite;
+}
+
+/* Image generation animation responsiveness */
+.image-generation-container {
+  width: 100%;
+  max-width: 100%;
+}
+
+.image-generation-container .grid {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.image-generation-container .aspect-square {
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
 }
 
 /* Streaming text styling */
