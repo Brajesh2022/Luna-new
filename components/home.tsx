@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,8 @@ import TypingEffect from "@/components/typing-effect"
 import ApiStatus from "@/components/api-status"
 import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
+import { SmoothScroller, throttle, getScrollPosition, easingFunctions } from "@/lib/smooth-scroll"
+import ImageGenerationAnimation from "@/components/image-generation-animation"
 
 // Simplified topic suggestions
 const TOPIC_SUGGESTIONS = [
@@ -45,12 +47,15 @@ export default function Home() {
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
   const [isCreatingImages, setIsCreatingImages] = useState(false)
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false)
+  const [scrollPosition, setScrollPosition] = useState({ isAtTop: true, isAtBottom: true, scrollPercentage: 0 })
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const smoothScroller = useRef(new SmoothScroller())
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const queryClient = useQueryClient()
 
@@ -74,58 +79,74 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Check if user is at bottom of scroll
-  const isAtBottom = () => {
-    if (!chatContainerRef.current) return true
+  // Enhanced scroll handling with smooth scrolling
+  const updateScrollPosition = useCallback(() => {
+    if (!chatContainerRef.current) return
+    
     const container = chatContainerRef.current
-    const threshold = 100 // pixels from bottom
-    return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold
-  }
+    const position = getScrollPosition(container)
+    
+    setScrollPosition(position)
+    setIsUserScrolledUp(!position.isAtBottom)
+  }, [])
 
-  // Handle scroll events to detect if user scrolled up
-  const handleScroll = () => {
-    try {
-      if (chatContainerRef.current) {
-        const isAtBottomNow = isAtBottom()
-        setIsUserScrolledUp(!isAtBottomNow)
+  // Throttled scroll handler for better performance
+  const handleScroll = useCallback(
+    throttle(() => {
+      updateScrollPosition()
+    }, 16), // ~60fps
+    [updateScrollPosition]
+  )
+
+  // Smooth scroll to bottom function
+  const scrollToBottom = useCallback(async (force: boolean = false) => {
+    if (!chatContainerRef.current || !messagesEndRef.current) return
+    
+    const container = chatContainerRef.current
+    const shouldScroll = force || !isUserScrolledUp
+    
+    if (shouldScroll) {
+      // Cancel any existing scroll animation
+      smoothScroller.current.cancel()
+      
+      // Clear any pending scroll timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
       }
-    } catch (error) {
-      console.error("Error handling scroll:", error)
+      
+      // Smooth scroll to bottom
+      await smoothScroller.current.scrollToBottom(container, {
+        duration: 600,
+        easing: easingFunctions.easeOut
+      })
+      
+      updateScrollPosition()
     }
-  }
+  }, [isUserScrolledUp, updateScrollPosition])
 
   // Auto-scroll to bottom when messages change (only if user is at bottom)
   useEffect(() => {
-    const scrollToBottom = () => {
-      if (messagesEndRef.current && !isUserScrolledUp) {
-        messagesEndRef.current.scrollIntoView({ 
-          behavior: "smooth", 
-          block: "end",
-          inline: "nearest"
-        })
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+    }
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      scrollToBottom()
+    }, 100)
+    
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
       }
     }
+  }, [allMessages, streamingMessage, scrollToBottom])
 
-    const timeoutId = setTimeout(scrollToBottom, 100)
-    return () => clearTimeout(timeoutId)
-  }, [allMessages, isLoading, streamingMessage, isUserScrolledUp])
-
-  // Auto-scroll to bottom for new messages or when typing
+  // Auto-scroll to bottom for loading states
   useEffect(() => {
     if (isLoading || streamingMessage) {
-      const scrollToBottom = () => {
-        if (messagesEndRef.current && !isUserScrolledUp) {
-          messagesEndRef.current.scrollIntoView({ 
-            behavior: "smooth", 
-            block: "end",
-            inline: "nearest"
-          })
-        }
-      }
-      const timeoutId = setTimeout(scrollToBottom, 100)
-      return () => clearTimeout(timeoutId)
+      scrollToBottom()
     }
-  }, [isLoading, streamingMessage, isUserScrolledUp])
+  }, [isLoading, streamingMessage, scrollToBottom])
 
   // Add scroll event listener
   useEffect(() => {
@@ -628,7 +649,11 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col mobile-content">
         {/* Messages */}
-        <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" style={{ paddingBottom: '100px' }}>
+        <div 
+          ref={chatContainerRef} 
+          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin scroll-container momentum-scroll" 
+          style={{ paddingBottom: '100px' }}
+        >
           {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full space-y-8">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -656,7 +681,7 @@ export default function Home() {
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.3 }}
                     className={cn(
-                      "flex gap-4 message relative",
+                      "flex gap-4 message relative message-snap",
                       message.role === "user" ? "justify-end" : "justify-start",
                     )}
                   >
@@ -716,22 +741,21 @@ export default function Home() {
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-4 justify-start"
+                  className="flex gap-4 justify-start message-snap"
                 >
                   <Avatar className="w-8 h-8 flex-shrink-0">
                     <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
                     <AvatarFallback>L</AvatarFallback>
                   </Avatar>
-                  <div className="glass-morphism p-4 rounded-2xl bg-black/20 text-white">
+                  <div className="glass-morphism rounded-2xl bg-black/20 text-white">
                     {isCreatingImages ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                        <span className="text-white/80">Creating images...</span>
-                      </div>
+                      <ImageGenerationAnimation isVisible={isCreatingImages} />
                     ) : (
-                      <div className="markdown-content">
-                        <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
-                        <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                      <div className="p-4">
+                        <div className="markdown-content">
+                          <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
+                          <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -744,7 +768,7 @@ export default function Home() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 justify-start"
+              className="flex gap-4 justify-start message-snap"
             >
               <Avatar className="w-8 h-8 flex-shrink-0">
                 <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
@@ -764,19 +788,49 @@ export default function Home() {
 
         {/* Scroll to Bottom Button */}
         {isUserScrolledUp && (
-          <div className="fixed bottom-24 right-4 z-40">
-            <Button
-              onClick={() => {
-                setIsUserScrolledUp(false)
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-              }}
-              variant="default"
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-2 shadow-lg"
-            >
-              <ArrowDown className="w-4 h-4" />
-            </Button>
-          </div>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 20 }}
+            className="fixed bottom-24 right-4 z-40"
+          >
+            <div className="relative">
+              {/* Scroll progress ring */}
+              <svg className="absolute inset-0 w-12 h-12 transform -rotate-90">
+                <circle
+                  cx="24"
+                  cy="24"
+                  r="20"
+                  fill="none"
+                  stroke="rgba(255, 255, 255, 0.1)"
+                  strokeWidth="2"
+                />
+                <circle
+                  cx="24"
+                  cy="24"
+                  r="20"
+                  fill="none"
+                  stroke="rgba(124, 58, 237, 0.8)"
+                  strokeWidth="2"
+                  strokeDasharray={`${2 * Math.PI * 20}`}
+                  strokeDashoffset={`${2 * Math.PI * 20 * (1 - scrollPosition.scrollPercentage / 100)}`}
+                  className="transition-all duration-300"
+                />
+              </svg>
+              
+              <Button
+                onClick={() => {
+                  setIsUserScrolledUp(false)
+                  scrollToBottom(true)
+                }}
+                variant="default"
+                size="sm"
+                className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg transition-all duration-200 hover:scale-110 relative z-10"
+              >
+                <ArrowDown className="w-4 h-4" />
+              </Button>
+            </div>
+          </motion.div>
         )}
 
         {/* Input Area */}
@@ -823,7 +877,7 @@ export default function Home() {
                   // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
                   if (!isUserScrolledUp) {
                     setTimeout(() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                      scrollToBottom()
                     }, 300)
                   }
                 }}
@@ -831,7 +885,7 @@ export default function Home() {
                   // Small delay to handle keyboard closing only if user is at bottom
                   if (!isUserScrolledUp) {
                     setTimeout(() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                      scrollToBottom()
                     }, 100)
                   }
                 }}
