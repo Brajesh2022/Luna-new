@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check } from "lucide-react"
+import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { motion, AnimatePresence } from "framer-motion"
@@ -44,6 +44,7 @@ export default function Home() {
   const [streamingMessage, setStreamingMessage] = useState<string>("")
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
   const [isCreatingImages, setIsCreatingImages] = useState(false)
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -73,10 +74,30 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Auto-scroll to bottom when messages change
+  // Check if user is at bottom of scroll
+  const isAtBottom = () => {
+    if (!chatContainerRef.current) return true
+    const container = chatContainerRef.current
+    const threshold = 100 // pixels from bottom
+    return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold
+  }
+
+  // Handle scroll events to detect if user scrolled up
+  const handleScroll = () => {
+    try {
+      if (chatContainerRef.current) {
+        const isAtBottomNow = isAtBottom()
+        setIsUserScrolledUp(!isAtBottomNow)
+      }
+    } catch (error) {
+      console.error("Error handling scroll:", error)
+    }
+  }
+
+  // Auto-scroll to bottom when messages change (only if user is at bottom)
   useEffect(() => {
     const scrollToBottom = () => {
-      if (messagesEndRef.current) {
+      if (messagesEndRef.current && !isUserScrolledUp) {
         messagesEndRef.current.scrollIntoView({ 
           behavior: "smooth", 
           block: "end",
@@ -87,7 +108,33 @@ export default function Home() {
 
     const timeoutId = setTimeout(scrollToBottom, 100)
     return () => clearTimeout(timeoutId)
-  }, [allMessages, isLoading, streamingMessage])
+  }, [allMessages, isLoading, streamingMessage, isUserScrolledUp])
+
+  // Auto-scroll to bottom for new messages or when typing
+  useEffect(() => {
+    if (isLoading || streamingMessage) {
+      const scrollToBottom = () => {
+        if (messagesEndRef.current && !isUserScrolledUp) {
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: "smooth", 
+            block: "end",
+            inline: "nearest"
+          })
+        }
+      }
+      const timeoutId = setTimeout(scrollToBottom, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [isLoading, streamingMessage, isUserScrolledUp])
+
+  // Add scroll event listener
+  useEffect(() => {
+    const container = chatContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', handleScroll)
+      return () => container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   // Focus input on load
   useEffect(() => {
@@ -109,6 +156,7 @@ export default function Home() {
       setLocalMessages([]) // Clear local messages
       setStreamingMessage("") // Clear streaming message
       setStreamingMessageId(null)
+      setIsCreatingImages(false)
       refetchMessages()
     }
   }, [activeConversation, refetchMessages])
@@ -237,8 +285,11 @@ export default function Home() {
         
         setStreamingMessage("")
         setStreamingMessageId(Date.now())
+        setIsCreatingImages(false)
         
         try {
+          let accumulatedContent = ""
+          
           while (true) {
             const { done, value } = await reader.read()
             
@@ -261,23 +312,41 @@ export default function Home() {
                     // Add user message to local state
                     console.log("Adding user message:", data.message)
                     setLocalMessages(prev => [...prev, data.message])
-                                  } else if (data.type === 'stream_chunk') {
-                  // Update streaming message
-                  setStreamingMessage(prev => {
-                    const newContent = prev + data.chunk
-                    // Check if this is image generation content
-                    if (isImageGenerationContent(newContent)) {
-                      setIsCreatingImages(true)
-                    }
-                    return newContent
-                  })
-                } else if (data.type === 'assistant_message_complete') {
-                                      // Replace streaming message with final message
-                  console.log("Streaming complete, adding final message:", data.message)
-                  setStreamingMessage("")
-                  setStreamingMessageId(null)
-                  setIsCreatingImages(false)
-                  setLocalMessages(prev => [...prev, data.message])
+                  } else if (data.type === 'stream_chunk') {
+                    // Accumulate content to check for image generation
+                    accumulatedContent += data.chunk
+                    
+                                         // Check if this looks like image generation JSON (early detection)
+                     if (accumulatedContent.includes('"type"') && accumulatedContent.includes('"image_generation"')) {
+                       console.log("Image generation detected, showing creating state")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (accumulatedContent.includes('{\n  "type": "image_generation"') || accumulatedContent.includes('{"type":"image_generation"')) {
+                       // Alternative JSON format detection
+                       console.log("Image generation detected (alternative format)")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (accumulatedContent.includes('"prompts"') && accumulatedContent.includes('[')) {
+                       // Detect by prompts array
+                       console.log("Image generation detected by prompts")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (accumulatedContent.trim().startsWith('{') && accumulatedContent.includes('"type"')) {
+                       // Any JSON with type field - likely image generation
+                       console.log("JSON with type detected - likely image generation")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (!isCreatingImages) {
+                       // Only show typing animation if not creating images
+                       setStreamingMessage(prev => prev + data.chunk)
+                     }
+                  } else if (data.type === 'assistant_message_complete') {
+                    // Replace streaming message with final message
+                    console.log("Streaming complete, adding final message:", data.message)
+                    setStreamingMessage("")
+                    setStreamingMessageId(null)
+                    setIsCreatingImages(false)
+                    setLocalMessages(prev => [...prev, data.message])
                   }
                 } catch (e) {
                   console.error('Error parsing streaming data:', e, 'Line:', line)
@@ -298,34 +367,35 @@ export default function Home() {
         if (data.userMessage && data.assistantMessage) {
           setLocalMessages(prev => [...prev, data.userMessage, data.assistantMessage])
           
-                  // Simulate typing effect for regular response
-        setStreamingMessage("")
-        setStreamingMessageId(Date.now())
-        
-        // Check if this is image generation content
-        const content = data.assistantMessage.content
-        if (isImageGenerationContent(content)) {
-          setIsCreatingImages(true)
-          // For image generation, just show loading and then complete
-          setTimeout(() => {
+          // Check if this is image generation content
+          const content = data.assistantMessage.content
+          if (isImageGenerationContent(content)) {
+            console.log("Image generation detected in regular response")
+            setIsCreatingImages(true)
+            setStreamingMessageId(Date.now())
+                         // Show creating for 3 seconds then complete
+             setTimeout(() => {
+               setStreamingMessage("")
+               setStreamingMessageId(null)
+               setIsCreatingImages(false)
+             }, 3000)
+          } else {
+            // Regular typing animation
             setStreamingMessage("")
-            setStreamingMessageId(null)
-            setIsCreatingImages(false)
-          }, 2000) // Show creating for 2 seconds
-        } else {
-          // Regular typing animation
-          let index = 0
-          const typingInterval = setInterval(() => {
-            if (index < content.length) {
-              setStreamingMessage(prev => prev + content[index])
-              index++
-            } else {
-              clearInterval(typingInterval)
-              setStreamingMessage("")
-              setStreamingMessageId(null)
-            }
-          }, 20)
-        }
+            setStreamingMessageId(Date.now())
+            
+            let index = 0
+            const typingInterval = setInterval(() => {
+              if (index < content.length) {
+                setStreamingMessage(prev => prev + content[index])
+                index++
+              } else {
+                clearInterval(typingInterval)
+                setStreamingMessage("")
+                setStreamingMessageId(null)
+              }
+            }, 20)
+          }
         }
       }
       
@@ -692,6 +762,23 @@ export default function Home() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Scroll to Bottom Button */}
+        {isUserScrolledUp && (
+          <div className="fixed bottom-24 right-4 z-40">
+            <Button
+              onClick={() => {
+                setIsUserScrolledUp(false)
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+              }}
+              variant="default"
+              size="sm"
+              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-2 shadow-lg"
+            >
+              <ArrowDown className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
         {/* Input Area */}
         <div className="mobile-input bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
           {imagePreview && (
@@ -733,16 +820,20 @@ export default function Home() {
                   }
                 }}
                 onFocus={() => {
-                  // Auto-scroll when input is focused (keyboard appears)
-                  setTimeout(() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-                  }, 300)
+                  // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
+                  if (!isUserScrolledUp) {
+                    setTimeout(() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                    }, 300)
+                  }
                 }}
                 onBlur={() => {
-                  // Small delay to handle keyboard closing
-                  setTimeout(() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-                  }, 100)
+                  // Small delay to handle keyboard closing only if user is at bottom
+                  if (!isUserScrolledUp) {
+                    setTimeout(() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                    }, 100)
+                  }
                 }}
                 rows={1}
                 style={{
