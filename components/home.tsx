@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check } from "lucide-react"
+import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { motion, AnimatePresence } from "framer-motion"
@@ -16,6 +16,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Message, Conversation } from "@/lib/schema"
 import ImageCollage from "@/components/image-collage"
 import TypingEffect from "@/components/typing-effect"
+import ApiStatus from "@/components/api-status"
+import { toast } from "sonner"
+import { Toaster } from "@/components/ui/sonner"
 
 // Simplified topic suggestions
 const TOPIC_SUGGESTIONS = [
@@ -38,6 +41,10 @@ export default function Home() {
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null)
   const [typingMessageId, setTypingMessageId] = useState<number | null>(null)
   const [localMessages, setLocalMessages] = useState<Message[]>([])
+  const [streamingMessage, setStreamingMessage] = useState<string>("")
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
+  const [isCreatingImages, setIsCreatingImages] = useState(false)
+  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -67,15 +74,67 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Auto-scroll to bottom when messages change
+  // Check if user is at bottom of scroll
+  const isAtBottom = () => {
+    if (!chatContainerRef.current) return true
+    const container = chatContainerRef.current
+    const threshold = 100 // pixels from bottom
+    return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold
+  }
+
+  // Handle scroll events to detect if user scrolled up
+  const handleScroll = () => {
+    try {
+      if (chatContainerRef.current) {
+        const isAtBottomNow = isAtBottom()
+        setIsUserScrolledUp(!isAtBottomNow)
+      }
+    } catch (error) {
+      console.error("Error handling scroll:", error)
+    }
+  }
+
+  // Auto-scroll to bottom when messages change (only if user is at bottom)
   useEffect(() => {
     const scrollToBottom = () => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+      if (messagesEndRef.current && !isUserScrolledUp) {
+        messagesEndRef.current.scrollIntoView({ 
+          behavior: "smooth", 
+          block: "end",
+          inline: "nearest"
+        })
+      }
     }
 
     const timeoutId = setTimeout(scrollToBottom, 100)
     return () => clearTimeout(timeoutId)
-  }, [allMessages, isLoading])
+  }, [allMessages, isLoading, streamingMessage, isUserScrolledUp])
+
+  // Auto-scroll to bottom for new messages or when typing
+  useEffect(() => {
+    if (isLoading || streamingMessage) {
+      const scrollToBottom = () => {
+        if (messagesEndRef.current && !isUserScrolledUp) {
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: "smooth", 
+            block: "end",
+            inline: "nearest"
+          })
+        }
+      }
+      const timeoutId = setTimeout(scrollToBottom, 100)
+      return () => clearTimeout(timeoutId)
+    }
+  }, [isLoading, streamingMessage, isUserScrolledUp])
+
+  // Add scroll event listener
+  useEffect(() => {
+    const container = chatContainerRef.current
+    if (container) {
+      container.addEventListener('scroll', handleScroll)
+      return () => container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
 
   // Focus input on load
   useEffect(() => {
@@ -95,6 +154,9 @@ export default function Home() {
     if (activeConversation) {
       console.log("Active conversation changed, refetching messages for:", activeConversation)
       setLocalMessages([]) // Clear local messages
+      setStreamingMessage("") // Clear streaming message
+      setStreamingMessageId(null)
+      setIsCreatingImages(false)
       refetchMessages()
     }
   }, [activeConversation, refetchMessages])
@@ -115,6 +177,39 @@ export default function Home() {
       window.removeEventListener("orientationchange", setVH)
     }
   }, [])
+
+  // Helper function to convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = () => {
+        const result = reader.result as string
+        // Remove the data URL prefix to get just the base64 data
+        const base64Data = result.split(',')[1]
+        resolve(base64Data)
+      }
+      reader.onerror = error => reject(error)
+    })
+  }
+
+  // Helper function to detect if response is image generation
+  const isImageGenerationContent = (content: string): boolean => {
+    try {
+      let cleanContent = content
+      if (content.includes("```json")) {
+        cleanContent = content
+          .replace(/```json\s*/g, "")
+          .replace(/```\s*/g, "")
+          .trim()
+      }
+      
+      const parsed = JSON.parse(cleanContent)
+      return parsed.type === "image_generation" && Array.isArray(parsed.prompts)
+    } catch {
+      return false
+    }
+  }
 
   // Create conversation mutation
   const createConversationMutation = useMutation({
@@ -137,42 +232,209 @@ export default function Home() {
     },
   })
 
-  // Send message mutation
-  const sendMessageMutation = useMutation({
-    mutationFn: async (content: string) => {
-      console.log("Sending message:", content, "to conversation:", activeConversation)
-      const response = await apiRequest("POST", `/api/conversations/${activeConversation}/messages`, { content })
-      const data = await response.json()
-      console.log("Message response received:", data)
-      return data
-    },
-    onSuccess: (data) => {
-      console.log("Message send success:", data)
-
-      // Add messages to local state immediately
-      if (data.userMessage && data.assistantMessage) {
-        setLocalMessages((prev) => [...prev, data.userMessage, data.assistantMessage])
-
-        // Start typing effect for the new assistant message
-        console.log("Starting typing effect for message:", data.assistantMessage.id)
-        setTypingMessageId(data.assistantMessage.id)
+  // Streaming message mutation
+  const sendStreamingMessageMutation = useMutation({
+    mutationFn: async ({ content, imageData, imageMimeType }: { content: string; imageData?: string; imageMimeType?: string }) => {
+      console.log("Sending streaming message:", content, "to conversation:", activeConversation)
+      
+      const payload: any = { content }
+      if (imageData && imageMimeType) {
+        payload.imageData = imageData
+        payload.imageMimeType = imageMimeType
       }
-
-      // Also invalidate and refetch server data
+      
+      try {
+        const response = await fetch(`/api/conversations/${activeConversation}/messages/stream`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        })
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error("Streaming API error:", response.status, errorText)
+          throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`)
+        }
+        
+        return { type: 'stream', response }
+      } catch (streamError) {
+        console.warn("Streaming failed, falling back to regular API:", streamError)
+        
+        // Fallback to regular API
+        const response = await apiRequest("POST", `/api/conversations/${activeConversation}/messages`, payload)
+        const data = await response.json()
+        return { type: 'regular', data }
+      }
+    },
+    onSuccess: async (result) => {
+      console.log("Message send success, type:", result.type)
+      
+      if (result.type === 'stream') {
+        // Handle streaming response
+        const response = result.response
+        
+        if (!response.body) {
+          console.error("No response body")
+          throw new Error("No response body")
+        }
+        
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        
+        setStreamingMessage("")
+        setStreamingMessageId(Date.now())
+        setIsCreatingImages(false)
+        
+        try {
+          let accumulatedContent = ""
+          
+          while (true) {
+            const { done, value } = await reader.read()
+            
+            if (done) {
+              console.log("Streaming complete")
+              break
+            }
+            
+            const chunk = decoder.decode(value, { stream: true })
+            console.log("Received chunk:", chunk)
+            const lines = chunk.split('\n')
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(line.slice(6))
+                  console.log("Parsed data:", data)
+                  
+                  if (data.type === 'user_message') {
+                    // Add user message to local state
+                    console.log("Adding user message:", data.message)
+                    setLocalMessages(prev => [...prev, data.message])
+                  } else if (data.type === 'stream_chunk') {
+                    // Accumulate content to check for image generation
+                    accumulatedContent += data.chunk
+                    
+                                         // Check if this looks like image generation JSON (early detection)
+                     if (accumulatedContent.includes('"type"') && accumulatedContent.includes('"image_generation"')) {
+                       console.log("Image generation detected, showing creating state")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (accumulatedContent.includes('{\n  "type": "image_generation"') || accumulatedContent.includes('{"type":"image_generation"')) {
+                       // Alternative JSON format detection
+                       console.log("Image generation detected (alternative format)")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (accumulatedContent.includes('"prompts"') && accumulatedContent.includes('[')) {
+                       // Detect by prompts array
+                       console.log("Image generation detected by prompts")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (accumulatedContent.trim().startsWith('{') && accumulatedContent.includes('"type"')) {
+                       // Any JSON with type field - likely image generation
+                       console.log("JSON with type detected - likely image generation")
+                       setIsCreatingImages(true)
+                       setStreamingMessage("") // Clear any accumulated text
+                     } else if (!isCreatingImages) {
+                       // Only show typing animation if not creating images
+                       setStreamingMessage(prev => prev + data.chunk)
+                     }
+                  } else if (data.type === 'assistant_message_complete') {
+                    // Replace streaming message with final message
+                    console.log("Streaming complete, adding final message:", data.message)
+                    setStreamingMessage("")
+                    setStreamingMessageId(null)
+                    setIsCreatingImages(false)
+                    setLocalMessages(prev => [...prev, data.message])
+                  }
+                } catch (e) {
+                  console.error('Error parsing streaming data:', e, 'Line:', line)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error reading stream:', error)
+        } finally {
+          reader.releaseLock()
+        }
+      } else {
+        // Handle regular API response
+        const data = result.data
+        console.log("Regular API response:", data)
+        
+        if (data.userMessage && data.assistantMessage) {
+          setLocalMessages(prev => [...prev, data.userMessage, data.assistantMessage])
+          
+          // Check if this is image generation content
+          const content = data.assistantMessage.content
+          if (isImageGenerationContent(content)) {
+            console.log("Image generation detected in regular response")
+            setIsCreatingImages(true)
+            setStreamingMessageId(Date.now())
+                         // Show creating for 3 seconds then complete
+             setTimeout(() => {
+               setStreamingMessage("")
+               setStreamingMessageId(null)
+               setIsCreatingImages(false)
+             }, 3000)
+          } else {
+            // Regular typing animation
+            setStreamingMessage("")
+            setStreamingMessageId(Date.now())
+            
+            let index = 0
+            const typingInterval = setInterval(() => {
+              if (index < content.length) {
+                setStreamingMessage(prev => prev + content[index])
+                index++
+              } else {
+                clearInterval(typingInterval)
+                setStreamingMessage("")
+                setStreamingMessageId(null)
+              }
+            }, 20)
+          }
+        }
+      }
+      
+      // Refresh messages from server
       queryClient.invalidateQueries({
         queryKey: ["/api/conversations", activeConversation, "messages"],
       })
-
-      // Force refetch after a short delay
+      
       setTimeout(() => {
         refetchMessages()
       }, 500)
-
+      
       setShowSuggestions(false)
     },
     onError: (error) => {
       console.error("Message send error:", error)
-      alert("Failed to send message. Check console for details.")
+      setStreamingMessage("")
+      setStreamingMessageId(null)
+      setIsCreatingImages(false)
+      
+      // Show appropriate error message based on error type
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage.includes("All") && errorMessage.includes("API keys failed")) {
+        toast.error("All API keys have failed", {
+          description: "Please check your API keys and try again later.",
+          duration: 5000,
+        })
+      } else if (errorMessage.includes("quota") || errorMessage.includes("limit")) {
+        toast.warning("API limit reached", {
+          description: "Switching to backup API key automatically.",
+          duration: 3000,
+        })
+      } else {
+        toast.error("Failed to send message", {
+          description: "Please try again in a moment.",
+          duration: 3000,
+        })
+      }
     },
   })
 
@@ -245,15 +507,19 @@ export default function Home() {
       setActiveConversation(newConversation.id)
       // Wait a bit for the conversation to be set
       setTimeout(() => {
-        sendMessageMutation.mutate(input)
+        handleStreamingSubmit()
       }, 100)
-      setInput("")
-      removeImage()
       return
     }
 
+    await handleStreamingSubmit()
+  }
+
+  const handleStreamingSubmit = async () => {
     setIsLoading(true)
+    setIsCreatingImages(false)
     const content = input
+    const imageFile = selectedImage
     setInput("")
     removeImage()
 
@@ -261,12 +527,39 @@ export default function Home() {
     inputRef.current?.blur()
 
     try {
-      console.log("Sending message mutation...")
-      await sendMessageMutation.mutateAsync(content)
-      console.log("Message sent successfully")
+      let imageData: string | undefined
+      let imageMimeType: string | undefined
+      
+      if (imageFile) {
+        imageData = await fileToBase64(imageFile)
+        imageMimeType = imageFile.type
+      }
+
+      console.log("Sending streaming message mutation...")
+      await sendStreamingMessageMutation.mutateAsync({ content, imageData, imageMimeType })
+      console.log("Streaming message sent successfully")
     } catch (error) {
-      console.error("Error sending message:", error)
-      alert("Error sending message: " + (error instanceof Error ? error.message : String(error)))
+      console.error("Error sending streaming message:", error)
+      
+      // Show appropriate error message based on error type
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      
+      if (errorMessage.includes("All") && errorMessage.includes("API keys failed")) {
+        toast.error("All API keys have failed", {
+          description: "Please check your API keys and try again later.",
+          duration: 5000,
+        })
+      } else if (errorMessage.includes("quota") || errorMessage.includes("limit")) {
+        toast.warning("API limit reached", {
+          description: "Switching to backup API key automatically.",
+          duration: 3000,
+        })
+      } else {
+        toast.error("Failed to send message", {
+          description: "Please try again in a moment.",
+          duration: 3000,
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -282,23 +575,6 @@ export default function Home() {
     setInput(topic)
     inputRef.current?.focus()
     setShowSuggestions(false)
-  }
-
-  const isImageGenerationResponse = (content: string) => {
-    try {
-      let cleanContent = content
-      if (content.includes("```json")) {
-        cleanContent = content
-          .replace(/```json\s*/g, "")
-          .replace(/```\s*/g, "")
-          .trim()
-      }
-
-      const parsed = JSON.parse(cleanContent)
-      return parsed.type === "image_generation" && Array.isArray(parsed.prompts) && parsed.prompts.length === 4
-    } catch {
-      return false
-    }
   }
 
   const getImagePrompts = (content: string) => {
@@ -337,23 +613,23 @@ export default function Home() {
             <h1 className="text-white font-semibold text-lg">Luna</h1>
             <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
           </div>
-        </div>
-        <Button
-          onClick={handleNewConversation}
-          variant="ghost"
-          size="sm"
-          className="text-white/80 hover:text-white hover:bg-white/10"
-        >
-          <PlusCircle className="w-4 h-4 mr-2" />
-          New Chat
-        </Button>
+                  </div>
+          <Button
+            onClick={handleNewConversation}
+            variant="ghost"
+            size="sm"
+            className="text-white/80 hover:text-white hover:bg-white/10"
+          >
+            <PlusCircle className="w-4 h-4 mr-2" />
+            New Chat
+          </Button>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col mobile-content">
         {/* Messages */}
-        <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin">
-          {allMessages.length === 0 && showSuggestions ? (
+        <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" style={{ paddingBottom: '100px' }}>
+          {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full space-y-8">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
                 <Avatar className="w-20 h-20 mx-auto mb-4">
@@ -397,19 +673,21 @@ export default function Home() {
                         message.role === "user" ? "user-message text-white" : "assistant-message text-white",
                       )}
                     >
-                      {message.role === "assistant" && isImageGenerationResponse(message.content) ? (
+                      {message.role === "user" && message.imageData && (
+                        <div className="mb-3">
+                          <img
+                            src={`data:${message.imageMimeType};base64,${message.imageData}`}
+                            alt="Uploaded image"
+                            className="max-w-xs max-h-48 object-contain rounded-lg border-2 border-white/20"
+                          />
+                        </div>
+                      )}
+                      
+                      {message.role === "assistant" && isImageGenerationContent(message.content) ? (
                         <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
                       ) : (
                         <div className="markdown-content">
-                          {message.role === "assistant" && typingMessageId === message.id ? (
-                            <TypingEffect
-                              text={message.content}
-                              onComplete={() => setTypingMessageId(null)}
-                              renderers={renderers}
-                            />
-                          ) : (
-                            <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
-                          )}
+                          <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
                         </div>
                       )}
 
@@ -432,10 +710,37 @@ export default function Home() {
                   </motion.div>
                 )
               })}
+              
+              {/* Streaming message */}
+              {streamingMessageId && (streamingMessage || isCreatingImages) && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex gap-4 justify-start"
+                >
+                  <Avatar className="w-8 h-8 flex-shrink-0">
+                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                    <AvatarFallback>L</AvatarFallback>
+                  </Avatar>
+                  <div className="glass-morphism p-4 rounded-2xl bg-black/20 text-white">
+                    {isCreatingImages ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                        <span className="text-white/80">Creating images...</span>
+                      </div>
+                    ) : (
+                      <div className="markdown-content">
+                        <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
+                        <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              )}
             </AnimatePresence>
           )}
 
-          {(isLoading || sendMessageMutation.isPending) && (
+          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -456,6 +761,23 @@ export default function Home() {
 
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Scroll to Bottom Button */}
+        {isUserScrolledUp && (
+          <div className="fixed bottom-24 right-4 z-40">
+            <Button
+              onClick={() => {
+                setIsUserScrolledUp(false)
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+              }}
+              variant="default"
+              size="sm"
+              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-2 shadow-lg"
+            >
+              <ArrowDown className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
 
         {/* Input Area */}
         <div className="mobile-input bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
@@ -498,16 +820,20 @@ export default function Home() {
                   }
                 }}
                 onFocus={() => {
-                  // Auto-scroll when input is focused (keyboard appears)
-                  setTimeout(() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-                  }, 300)
+                  // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
+                  if (!isUserScrolledUp) {
+                    setTimeout(() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                    }, 300)
+                  }
                 }}
                 onBlur={() => {
-                  // Small delay to handle keyboard closing
-                  setTimeout(() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-                  }, 100)
+                  // Small delay to handle keyboard closing only if user is at bottom
+                  if (!isUserScrolledUp) {
+                    setTimeout(() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                    }, 100)
+                  }
                 }}
                 rows={1}
                 style={{
@@ -531,10 +857,10 @@ export default function Home() {
 
             <Button
               type="submit"
-              disabled={isLoading || sendMessageMutation.isPending || (!input.trim() && !selectedImage)}
+              disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
               className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading || sendMessageMutation.isPending ? (
+              {isLoading || sendStreamingMessageMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Send className="w-4 h-4" />
@@ -543,6 +869,12 @@ export default function Home() {
           </form>
         </div>
       </div>
+      
+      {/* API Status Monitor */}
+      <ApiStatus />
+      
+      {/* Toast Notifications */}
+      <Toaster />
     </div>
   )
 }
