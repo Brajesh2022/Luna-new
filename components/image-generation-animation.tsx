@@ -49,13 +49,13 @@ const ImageGenerationAnimation: React.FC<ImageGenerationAnimationProps> = ({ isV
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.8 }}
-        className="relative space-y-3"
+        className="relative space-y-2 sm:space-y-3"
       >
         {/* Header to match image collage */}
-        <div className="text-white/70 text-sm mb-3">Creating 4 image variations for you:</div>
+        <div className="text-white/70 text-sm mb-2 sm:mb-3">Creating 4 image variations for you:</div>
 
         {/* Main animation container matching image collage grid */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4">
           {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}

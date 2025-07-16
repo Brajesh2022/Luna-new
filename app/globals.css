@@ -424,9 +424,9 @@ body {
 
   .mobile-content {
     /* Account for fixed header and input */
-    padding-top: calc(90px + env(safe-area-inset-top));
-    padding-bottom: calc(90px + env(safe-area-inset-bottom));
-    height: calc(100vh - 180px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding-top: calc(100px + env(safe-area-inset-top));
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+    height: calc(100vh - 200px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
   }
