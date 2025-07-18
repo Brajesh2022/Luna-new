@@ -1,17 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import ReactMarkdown from "react-markdown" // Import ReactMarkdown
+import ReactMarkdown from "react-markdown"
 
 interface TypingEffectProps {
   text: string
   speed?: number
   onComplete?: () => void
-  renderers?: any // Add renderers prop for markdown
+  renderers?: any
 }
 
-export default function TypingEffect({ text, speed = 5, onComplete, renderers }: TypingEffectProps) {
-  // Default speed to 5
+export default function TypingEffect({ text, speed = 10, onComplete, renderers }: TypingEffectProps) {
   const [displayedText, setDisplayedText] = useState("")
   const [currentIndex, setCurrentIndex] = useState(0)
 
@@ -35,9 +34,9 @@ export default function TypingEffect({ text, speed = 5, onComplete, renderers }:
   }, [text])
 
   return (
-    <span>
-      <ReactMarkdown components={renderers}>{displayedText}</ReactMarkdown> {/* Render markdown here */}
-      {currentIndex < text.length && <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />}
-    </span>
+    <div className="inline">
+      <ReactMarkdown components={renderers}>{displayedText}</ReactMarkdown>
+      {currentIndex < text.length && <span className="inline-block w-0.5 h-4 bg-purple-400 ml-0.5 animate-pulse" />}
+    </div>
   )
 }

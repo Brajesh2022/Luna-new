@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,8 @@ import TypingEffect from "@/components/typing-effect"
 import ApiStatus from "@/components/api-status"
 import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
+import { getScrollPosition } from "@/lib/smooth-scroll"
+import ImageGenerationAnimation from "@/components/image-generation-animation"
 
 // Simplified topic suggestions
 const TOPIC_SUGGESTIONS = [
@@ -51,6 +53,7 @@ export default function Home() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const queryClient = useQueryClient()
 
@@ -74,58 +77,68 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Check if user is at bottom of scroll
-  const isAtBottom = () => {
-    if (!chatContainerRef.current) return true
+  // Simplified scroll handling
+  const updateScrollPosition = useCallback(() => {
+    if (!chatContainerRef.current) return
+    
     const container = chatContainerRef.current
-    const threshold = 100 // pixels from bottom
-    return container.scrollTop + container.clientHeight >= container.scrollHeight - threshold
-  }
+    const position = getScrollPosition(container)
+    
+    setIsUserScrolledUp(!position.isAtBottom)
+  }, [])
 
-  // Handle scroll events to detect if user scrolled up
-  const handleScroll = () => {
-    try {
-      if (chatContainerRef.current) {
-        const isAtBottomNow = isAtBottom()
-        setIsUserScrolledUp(!isAtBottomNow)
-      }
-    } catch (error) {
-      console.error("Error handling scroll:", error)
+  // Simple scroll handler without throttling
+  const handleScroll = useCallback(() => {
+    updateScrollPosition()
+  }, [updateScrollPosition])
+
+  // Simple scroll to bottom function
+  const scrollToBottom = useCallback((force: boolean = false) => {
+    if (!messagesEndRef.current) return
+    
+    const shouldScroll = force || !isUserScrolledUp
+    
+    if (shouldScroll) {
+      // Use native smooth scrolling instead of custom animation
+      messagesEndRef.current.scrollIntoView({ 
+        behavior: "smooth", 
+        block: "end",
+        inline: "nearest"
+      })
+      
+      // Update position after a short delay
+      setTimeout(() => {
+        updateScrollPosition()
+      }, 100)
     }
-  }
+  }, [isUserScrolledUp, updateScrollPosition])
 
   // Auto-scroll to bottom when messages change (only if user is at bottom)
   useEffect(() => {
-    const scrollToBottom = () => {
-      if (messagesEndRef.current && !isUserScrolledUp) {
-        messagesEndRef.current.scrollIntoView({ 
-          behavior: "smooth", 
-          block: "end",
-          inline: "nearest"
-        })
+    if (scrollTimeoutRef.current) {
+      clearTimeout(scrollTimeoutRef.current)
+    }
+    
+    scrollTimeoutRef.current = setTimeout(() => {
+      // Only auto-scroll if user is at bottom to prevent interrupting reading
+      if (!isUserScrolledUp) {
+        scrollToBottom()
+      }
+    }, 200)
+    
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
       }
     }
+  }, [allMessages, scrollToBottom, isUserScrolledUp])
 
-    const timeoutId = setTimeout(scrollToBottom, 100)
-    return () => clearTimeout(timeoutId)
-  }, [allMessages, isLoading, streamingMessage, isUserScrolledUp])
-
-  // Auto-scroll to bottom for new messages or when typing
+  // Auto-scroll to bottom for loading states (less aggressive)
   useEffect(() => {
-    if (isLoading || streamingMessage) {
-      const scrollToBottom = () => {
-        if (messagesEndRef.current && !isUserScrolledUp) {
-          messagesEndRef.current.scrollIntoView({ 
-            behavior: "smooth", 
-            block: "end",
-            inline: "nearest"
-          })
-        }
-      }
-      const timeoutId = setTimeout(scrollToBottom, 100)
-      return () => clearTimeout(timeoutId)
+    if ((isLoading || streamingMessage) && !isUserScrolledUp) {
+      scrollToBottom()
     }
-  }, [isLoading, streamingMessage, isUserScrolledUp])
+  }, [isLoading, streamingMessage, scrollToBottom, isUserScrolledUp])
 
   // Add scroll event listener
   useEffect(() => {
@@ -394,7 +407,7 @@ export default function Home() {
                 setStreamingMessage("")
                 setStreamingMessageId(null)
               }
-            }, 20)
+            }, 10)
           }
         }
       }
@@ -628,7 +641,11 @@ export default function Home() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col mobile-content">
         {/* Messages */}
-        <div ref={chatContainerRef} className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" style={{ paddingBottom: '100px' }}>
+        <div 
+          ref={chatContainerRef} 
+          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" 
+          style={{ paddingBottom: '60px' }}
+        >
           {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <div className="flex flex-col items-center justify-center h-full space-y-8">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
@@ -722,16 +739,14 @@ export default function Home() {
                     <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
                     <AvatarFallback>L</AvatarFallback>
                   </Avatar>
-                  <div className="glass-morphism p-4 rounded-2xl bg-black/20 text-white">
+                  <div className="glass-morphism rounded-2xl bg-black/20 text-white">
                     {isCreatingImages ? (
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                        <span className="text-white/80">Creating images...</span>
-                      </div>
+                      <ImageGenerationAnimation isVisible={isCreatingImages} />
                     ) : (
-                      <div className="markdown-content">
-                        <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
-                        <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
+                      <div className="p-4">
+                        <div className="markdown-content">
+                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -768,11 +783,11 @@ export default function Home() {
             <Button
               onClick={() => {
                 setIsUserScrolledUp(false)
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                scrollToBottom(true)
               }}
               variant="default"
               size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-2 shadow-lg"
+              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg"
             >
               <ArrowDown className="w-4 h-4" />
             </Button>
@@ -823,7 +838,7 @@ export default function Home() {
                   // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
                   if (!isUserScrolledUp) {
                     setTimeout(() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                      scrollToBottom()
                     }, 300)
                   }
                 }}
@@ -831,7 +846,7 @@ export default function Home() {
                   // Small delay to handle keyboard closing only if user is at bottom
                   if (!isUserScrolledUp) {
                     setTimeout(() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+                      scrollToBottom()
                     }, 100)
                   }
                 }}

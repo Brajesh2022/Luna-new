@@ -66,7 +66,7 @@ export default function ImageCollage({ prompts, messageId }: ImageCollageProps) 
     <div className="relative space-y-3">
       <div className="text-white/70 text-sm mb-3">Generated 4 image variations for you:</div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 w-full">
         {images.map((image, index) => (
           <div
             key={`${messageId}-${index}`}
