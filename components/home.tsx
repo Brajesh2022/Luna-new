@@ -1,13 +1,12 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
+import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown, Bot, User, Sparkles, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from "framer-motion"
 import { TopicSuggestion } from "@/components/topic-suggestion"
 import ReactMarkdown from "react-markdown"
 import { CodeBlock } from "@/components/code-block"
@@ -22,15 +21,74 @@ import { Toaster } from "@/components/ui/sonner"
 import { getScrollPosition } from "@/lib/smooth-scroll"
 import ImageGenerationAnimation from "@/components/image-generation-animation"
 
-// Simplified topic suggestions
+// Enhanced topic suggestions with categories
 const TOPIC_SUGGESTIONS = [
-  "Write a short story about a time traveler",
-  "Help me draft a professional email",
-  "Explain quantum computing in simple terms",
-  "Create a study plan for learning JavaScript",
-  "Generate images of a beautiful sunset",
-  "How can I improve my presentation skills?",
+  {
+    category: "Creative",
+    icon: "✨",
+    suggestions: [
+      "Write a short story about a time traveler",
+      "Generate images of a beautiful sunset",
+      "Create a poem about artificial intelligence"
+    ]
+  },
+  {
+    category: "Productivity", 
+    icon: "⚡",
+    suggestions: [
+      "Help me draft a professional email",
+      "Create a study plan for learning JavaScript",
+      "How can I improve my presentation skills?"
+    ]
+  },
+  {
+    category: "Learning",
+    icon: "🧠", 
+    suggestions: [
+      "Explain quantum computing in simple terms",
+      "What are the latest AI developments?",
+      "Teach me about blockchain technology"
+    ]
+  }
 ]
+
+// Floating particles component
+const FloatingParticles = () => {
+  const particles = Array.from({ length: 15 }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    y: Math.random() * 100,
+    scale: Math.random() * 0.5 + 0.5,
+    duration: Math.random() * 20 + 10,
+    delay: Math.random() * 5
+  }))
+
+  return (
+    <div className="fixed inset-0 pointer-events-none overflow-hidden">
+      {particles.map((particle) => (
+        <motion.div
+          key={particle.id}
+          className="absolute w-1 h-1 bg-purple-400/20 rounded-full"
+          style={{
+            left: `${particle.x}%`,
+            top: `${particle.y}%`,
+          }}
+          animate={{
+            y: [0, -100, 0],
+            opacity: [0, 1, 0],
+            scale: [0, particle.scale, 0],
+          }}
+          transition={{
+            duration: particle.duration,
+            repeat: Infinity,
+            delay: particle.delay,
+            ease: "easeInOut",
+          }}
+        />
+      ))}
+    </div>
+  )
+}
 
 export default function Home() {
   // State for messages and UI
@@ -55,6 +113,12 @@ export default function Home() {
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Motion values for smooth interactions
+  const mouseX = useMotionValue(0)
+  const mouseY = useMotionValue(0)
+  const springX = useSpring(mouseX, { stiffness: 300, damping: 30 })
+  const springY = useSpring(mouseY, { stiffness: 300, damping: 30 })
+
   const queryClient = useQueryClient()
 
   // Query for conversations
@@ -76,6 +140,13 @@ export default function Home() {
   const allMessages = [...messages, ...localMessages].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
+
+  // Mouse tracking for interactive effects
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    mouseX.set(e.clientX - rect.left)
+    mouseY.set(e.clientY - rect.top)
+  }, [mouseX, mouseY])
 
   // Simplified scroll handling
   const updateScrollPosition = useCallback(() => {
@@ -455,12 +526,12 @@ export default function Home() {
     const file = e.target.files?.[0]
     if (file) {
       if (!file.type.startsWith("image/")) {
-        alert("Please upload an image file")
+        toast.error("Please upload an image file")
         return
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        alert("Image size should be less than 5MB")
+        toast.error("Image size should be less than 5MB")
         return
       }
 
@@ -486,6 +557,7 @@ export default function Home() {
     navigator.clipboard.writeText(content)
     setCopiedMessageId(id)
     setTimeout(() => setCopiedMessageId(null), 2000)
+    toast.success("Message copied!")
   }
 
   // Custom renderer for code blocks
@@ -584,7 +656,6 @@ export default function Home() {
   }
 
   const handleTopicSelect = (topic: string) => {
-    console.log("Topic selected:", topic)
     setInput(topic)
     inputRef.current?.focus()
     setShowSuggestions(false)
@@ -607,168 +678,406 @@ export default function Home() {
     }
   }
 
-  console.log("Render - Server messages count:", messages.length)
-  console.log("Render - Local messages count:", localMessages.length)
-  console.log("Render - All messages count:", allMessages.length)
-  console.log("Render - Active conversation:", activeConversation)
-  console.log("Render - Show suggestions:", showSuggestions)
-
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 mobile-safe">
+    <div 
+      className="h-screen flex flex-col bg-gradient-to-br from-slate-950 via-purple-950 to-slate-950 mobile-safe relative overflow-hidden"
+      onMouseMove={handleMouseMove}
+    >
+      {/* Floating particles background */}
+      <FloatingParticles />
+      
+      {/* Dynamic background gradients */}
+      <motion.div
+        className="absolute inset-0 opacity-30"
+        animate={{
+          background: [
+            "radial-gradient(circle at 20% 80%, rgba(147, 51, 234, 0.3) 0%, transparent 50%)",
+            "radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.3) 0%, transparent 50%)",
+            "radial-gradient(circle at 40% 40%, rgba(236, 72, 153, 0.3) 0%, transparent 50%)",
+            "radial-gradient(circle at 20% 80%, rgba(147, 51, 234, 0.3) 0%, transparent 50%)",
+          ],
+        }}
+        transition={{
+          duration: 10,
+          repeat: Infinity,
+          ease: "linear",
+        }}
+      />
       {/* Header */}
-      <header className="mobile-header bg-black/20 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Avatar className="w-10 h-10">
-            <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-            <AvatarFallback>L</AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-white font-semibold text-lg">Luna</h1>
-            <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
-          </div>
-                  </div>
-          <Button
-            onClick={handleNewConversation}
-            variant="ghost"
-            size="sm"
-            className="text-white/80 hover:text-white hover:bg-white/10"
+      <motion.header 
+        className="mobile-header bg-slate-950/80 backdrop-blur-2xl border-b border-purple-500/20 px-6 py-4 relative z-10"
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      >
+        <div className="flex items-center justify-between">
+          <motion.div 
+            className="flex items-center space-x-4"
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 400 }}
           >
-            <PlusCircle className="w-4 h-4 mr-2" />
-            New Chat
-          </Button>
-      </header>
+            <div className="relative">
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full blur-lg opacity-30"
+                animate={{ rotate: 360 }}
+                transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
+              />
+              <Avatar className="w-12 h-12 relative border-2 border-purple-400/50 bg-gradient-to-br from-purple-900 to-blue-900">
+                <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+                  <Sparkles className="w-6 h-6" />
+                </AvatarFallback>
+              </Avatar>
+            </div>
+            <div>
+              <motion.h1 
+                className="text-white font-bold text-xl bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+              >
+                Luna
+              </motion.h1>
+              <motion.p 
+                className="text-white/60 text-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+              >
+                AI Assistant by Brajesh
+              </motion.p>
+            </div>
+          </motion.div>
+          
+          <motion.div
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Button
+              onClick={handleNewConversation}
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border-0 shadow-lg hover:shadow-purple-500/25 transition-all duration-300"
+              size="sm"
+            >
+              <PlusCircle className="w-4 h-4 mr-2" />
+              New Chat
+            </Button>
+          </motion.div>
+        </div>
+      </motion.header>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col mobile-content">
+      <div className="flex-1 flex flex-col mobile-content relative z-10">
         {/* Messages */}
         <div 
           ref={chatContainerRef} 
-          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" 
-          style={{ paddingBottom: '60px' }}
+          className="flex-1 overflow-y-auto px-6 py-8 space-y-8 scrollbar-thin" 
+          style={{ paddingBottom: '80px' }}
         >
-          {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
-            <div className="flex flex-col items-center justify-center h-full space-y-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-                <Avatar className="w-20 h-20 mx-auto mb-4">
-                  <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                  <AvatarFallback>L</AvatarFallback>
-                </Avatar>
-                <h2 className="text-2xl font-semibold text-white mb-2">Welcome to Luna</h2>
-                <p className="text-white/60 mb-8">
-                  Your intelligent AI assistant created by Brajesh. How can I help you today?
-                </p>
-              </motion.div>
+          <AnimatePresence mode="popLayout">
+            {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
+              <motion.div 
+                key="welcome"
+                className="flex flex-col items-center justify-center h-full space-y-12"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              >
+                <motion.div 
+                  className="text-center"
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.2 }}
+                >
+                  <div className="relative mb-8">
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-purple-500/30 to-blue-500/30 rounded-full blur-3xl"
+                      animate={{ 
+                        scale: [1, 1.2, 1],
+                        opacity: [0.3, 0.6, 0.3] 
+                      }}
+                      transition={{ duration: 4, repeat: Infinity }}
+                    />
+                    <Avatar className="w-24 h-24 mx-auto relative border-4 border-purple-400/30 bg-gradient-to-br from-purple-900 to-blue-900">
+                      <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                      <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+                        <Sparkles className="w-12 h-12" />
+                      </AvatarFallback>
+                    </Avatar>
+                  </div>
+                  <motion.h2 
+                    className="text-4xl font-bold text-white mb-4 bg-gradient-to-r from-purple-400 via-pink-400 to-blue-400 bg-clip-text text-transparent"
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    Welcome to Luna
+                  </motion.h2>
+                  <motion.p 
+                    className="text-white/70 text-lg mb-12 max-w-md mx-auto"
+                    initial={{ y: 20, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.6 }}
+                  >
+                    Your intelligent AI assistant created by Brajesh. Ready to help you create, learn, and explore!
+                  </motion.p>
+                </motion.div>
 
-              <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
-            </div>
-          ) : (
-            <AnimatePresence>
-              {allMessages.map((message, index) => {
-                console.log("Rendering message:", message.id, message.role, message.content.substring(0, 50))
-                return (
+                <motion.div
+                  className="w-full max-w-4xl"
+                  initial={{ y: 30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.8 }}
+                >
+                  <TopicSuggestion examples={TOPIC_SUGGESTIONS.flatMap(cat => cat.suggestions)} onSelect={handleTopicSelect} />
+                </motion.div>
+              </motion.div>
+                      ) : (
+              <>
+                {allMessages.map((message) => (
                   <motion.div
                     key={message.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
+                    layout
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    transition={{ 
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30,
+                      mass: 1
+                    }}
                     className={cn(
-                      "flex gap-4 message relative",
-                      message.role === "user" ? "justify-end" : "justify-start",
+                      "flex gap-4 message relative group",
+                      message.role === "user" ? "justify-end ml-12" : "justify-start mr-12",
                     )}
                   >
                     {message.role === "assistant" && (
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                        <AvatarFallback>L</AvatarFallback>
-                      </Avatar>
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                        className="relative"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full blur-lg" />
+                        <Avatar className="w-10 h-10 relative border-2 border-purple-400/30 bg-gradient-to-br from-purple-900/50 to-blue-900/50">
+                          <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                          <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+                            <Bot className="w-5 h-5" />
+                          </AvatarFallback>
+                        </Avatar>
+                        <motion.div
+                          className="absolute -inset-1 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full opacity-20"
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                        />
+                      </motion.div>
                     )}
 
-                    <div
+                    <motion.div
+                      layout
                       className={cn(
-                        "message-container glass-morphism p-4 rounded-2xl",
-                        message.role === "user" ? "user-message text-white" : "assistant-message text-white",
+                        "message-container relative overflow-hidden",
+                        message.role === "user" 
+                          ? "bg-gradient-to-br from-purple-600/90 to-pink-600/90 backdrop-blur-xl border border-purple-400/30 text-white max-w-[80%]" 
+                          : "bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-slate-600/30 text-white max-w-[85%]",
+                        "rounded-3xl p-6 shadow-2xl"
                       )}
+                      whileHover={{ 
+                        scale: 1.02,
+                        boxShadow: message.role === "user" 
+                          ? "0 20px 40px rgba(147, 51, 234, 0.3)" 
+                          : "0 20px 40px rgba(0, 0, 0, 0.4)"
+                      }}
+                      transition={{ type: "spring", stiffness: 300, damping: 30 }}
                     >
-                      {message.role === "user" && message.imageData && (
-                        <div className="mb-3">
-                          <img
-                            src={`data:${message.imageMimeType};base64,${message.imageData}`}
-                            alt="Uploaded image"
-                            className="max-w-xs max-h-48 object-contain rounded-lg border-2 border-white/20"
+                      {/* Animated background gradient */}
+                      <motion.div
+                        className={cn(
+                          "absolute inset-0 opacity-10 rounded-3xl",
+                          message.role === "user" 
+                            ? "bg-gradient-to-br from-purple-300 via-pink-300 to-purple-300"
+                            : "bg-gradient-to-br from-blue-300 via-purple-300 to-blue-300"
+                        )}
+                        animate={{
+                          background: message.role === "user" ? [
+                            "linear-gradient(45deg, #a855f7, #ec4899, #a855f7)",
+                            "linear-gradient(135deg, #ec4899, #f59e0b, #ec4899)",
+                            "linear-gradient(225deg, #f59e0b, #a855f7, #f59e0b)",
+                            "linear-gradient(315deg, #a855f7, #ec4899, #a855f7)"
+                          ] : [
+                            "linear-gradient(45deg, #3b82f6, #8b5cf6, #3b82f6)",
+                            "linear-gradient(135deg, #8b5cf6, #06b6d4, #8b5cf6)",
+                            "linear-gradient(225deg, #06b6d4, #3b82f6, #06b6d4)",
+                            "linear-gradient(315deg, #3b82f6, #8b5cf6, #3b82f6)"
+                          ]
+                        }}
+                        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                      />
+
+                      {/* Content */}
+                      <div className="relative z-10">
+                        {message.role === "user" && message.imageData && (
+                          <motion.div 
+                            className="mb-4"
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.3 }}
+                          >
+                            <img
+                              src={`data:${message.imageMimeType};base64,${message.imageData}`}
+                              alt="Uploaded image"
+                              className="max-w-xs max-h-48 object-contain rounded-2xl border-2 border-white/30 shadow-lg"
+                            />
+                          </motion.div>
+                        )}
+                        
+                        {message.role === "assistant" && isImageGenerationContent(message.content) ? (
+                          <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
+                        ) : (
+                          <div className="markdown-content prose prose-invert max-w-none">
+                            <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Copy button */}
+                      <motion.button
+                        className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 bg-white/10 hover:bg-white/20 backdrop-blur-sm rounded-lg p-2 transition-all duration-200"
+                        onClick={() => copyMessage(message.content, message.id)}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                      >
+                        {copiedMessageId === message.id ? 
+                          <Check className="w-4 h-4 text-green-400" /> : 
+                          <Copy className="w-4 h-4 text-white/70" />
+                        }
+                      </motion.button>
+                    </motion.div>
+
+                    {message.role === "user" && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                        className="relative"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-br from-pink-500/20 to-purple-500/20 rounded-full blur-lg" />
+                        <Avatar className="w-10 h-10 relative border-2 border-pink-400/30 bg-gradient-to-br from-pink-900/50 to-purple-900/50">
+                          <AvatarImage src="/images/user-avatar.jpg" alt="User" />
+                          <AvatarFallback className="bg-gradient-to-br from-pink-600 to-purple-600 text-white">
+                            <User className="w-5 h-5" />
+                          </AvatarFallback>
+                        </Avatar>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                ))}
+                
+                {/* Streaming message */}
+                {streamingMessageId && (streamingMessage || isCreatingImages) && (
+                  <motion.div
+                    key="streaming"
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    className="flex gap-4 justify-start mr-12"
+                  >
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
+                      className="relative"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full blur-lg" />
+                      <Avatar className="w-10 h-10 relative border-2 border-purple-400/30 bg-gradient-to-br from-purple-900/50 to-blue-900/50">
+                        <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                        <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+                          <Bot className="w-5 h-5" />
+                        </AvatarFallback>
+                      </Avatar>
+                      <motion.div
+                        className="absolute -inset-1 bg-gradient-to-r from-purple-400 to-blue-400 rounded-full opacity-20"
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+                      />
+                    </motion.div>
+                    <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-slate-600/30 rounded-3xl p-6 shadow-2xl max-w-[85%] relative overflow-hidden">
+                      <motion.div
+                        className="absolute inset-0 opacity-10 rounded-3xl bg-gradient-to-br from-blue-300 via-purple-300 to-blue-300"
+                        animate={{
+                          background: [
+                            "linear-gradient(45deg, #3b82f6, #8b5cf6, #3b82f6)",
+                            "linear-gradient(135deg, #8b5cf6, #06b6d4, #8b5cf6)",
+                            "linear-gradient(225deg, #06b6d4, #3b82f6, #06b6d4)",
+                            "linear-gradient(315deg, #3b82f6, #8b5cf6, #3b82f6)"
+                          ]
+                        }}
+                        transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+                      />
+                      {isCreatingImages ? (
+                        <ImageGenerationAnimation isVisible={isCreatingImages} />
+                      ) : (
+                        <div className="relative z-10 markdown-content prose prose-invert max-w-none">
+                          <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
+                          <motion.span
+                            className="inline-block w-0.5 h-5 bg-purple-400 ml-1"
+                            animate={{ opacity: [1, 0, 1] }}
+                            transition={{ duration: 1, repeat: Infinity }}
                           />
                         </div>
                       )}
-                      
-                      {message.role === "assistant" && isImageGenerationContent(message.content) ? (
-                        <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
-                      ) : (
-                        <div className="markdown-content">
-                          <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
-                        </div>
-                      )}
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="message-copy-button"
-                        onClick={() => copyMessage(message.content, message.id)}
-                      >
-                        {copiedMessageId === message.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      </Button>
                     </div>
-
-                    {message.role === "user" && (
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarImage src="/images/user-avatar.jpg" alt="User" />
-                        <AvatarFallback>U</AvatarFallback>
-                      </Avatar>
-                    )}
                   </motion.div>
-                )
-              })}
-              
-              {/* Streaming message */}
-              {streamingMessageId && (streamingMessage || isCreatingImages) && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-4 justify-start"
-                >
-                  <Avatar className="w-8 h-8 flex-shrink-0">
-                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                    <AvatarFallback>L</AvatarFallback>
-                  </Avatar>
-                  <div className="glass-morphism rounded-2xl bg-black/20 text-white">
-                    {isCreatingImages ? (
-                      <ImageGenerationAnimation isVisible={isCreatingImages} />
-                    ) : (
-                      <div className="p-4">
-                        <div className="markdown-content">
-                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
+                )}
+              </>
+            )}
+          </AnimatePresence>
 
           {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 justify-start"
+              exit={{ opacity: 0, y: -20 }}
+              className="flex gap-4 justify-start mr-12"
             >
-              <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                <AvatarFallback>L</AvatarFallback>
-              </Avatar>
-              <div className="glass-morphism p-4 rounded-2xl bg-black/20">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full blur-lg" />
+                <Avatar className="w-10 h-10 relative border-2 border-purple-400/30 bg-gradient-to-br from-purple-900/50 to-blue-900/50">
+                  <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                  <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white">
+                    <Bot className="w-5 h-5" />
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+              <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 backdrop-blur-xl border border-slate-600/30 rounded-3xl p-6 shadow-2xl">
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Loader2 className="w-5 h-5 text-purple-400" />
+                  </motion.div>
                   <span className="text-white/80">Luna is thinking...</span>
+                  <motion.div
+                    className="flex space-x-1"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    {[0, 1, 2].map((i) => (
+                      <motion.div
+                        key={i}
+                        className="w-1 h-1 bg-purple-400 rounded-full"
+                        animate={{ scale: [1, 1.5, 1], opacity: [0.5, 1, 0.5] }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          delay: i * 0.2,
+                        }}
+                      />
+                    ))}
+                  </motion.div>
                 </div>
               </div>
             </motion.div>
@@ -778,56 +1087,84 @@ export default function Home() {
         </div>
 
         {/* Scroll to Bottom Button */}
-        {isUserScrolledUp && (
-          <div className="fixed bottom-24 right-4 z-40">
-            <Button
-              onClick={() => {
-                setIsUserScrolledUp(false)
-                scrollToBottom(true)
-              }}
-              variant="default"
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg"
+        <AnimatePresence>
+          {isUserScrolledUp && (
+            <motion.div 
+              className="fixed bottom-32 right-8 z-40"
+              initial={{ opacity: 0, scale: 0, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
             >
-              <ArrowDown className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
+              <motion.button
+                onClick={() => {
+                  setIsUserScrolledUp(false)
+                  scrollToBottom(true)
+                }}
+                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-full p-4 shadow-2xl border border-purple-400/30 backdrop-blur-xl"
+                whileHover={{ 
+                  scale: 1.1,
+                  boxShadow: "0 20px 40px rgba(147, 51, 234, 0.4)"
+                }}
+                whileTap={{ scale: 0.95 }}
+              >
+                <ArrowDown className="w-5 h-5" />
+              </motion.button>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Input Area */}
-        <div className="mobile-input bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
-          {imagePreview && (
-            <div className="mb-4 relative inline-block">
-              <img
-                src={imagePreview || "/placeholder.svg"}
-                alt="Upload preview"
-                className="w-16 h-16 object-cover rounded-lg border-2 border-purple-400/50"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600"
-                onClick={removeImage}
+        <motion.div 
+          className="mobile-input bg-slate-950/80 backdrop-blur-2xl border-t border-purple-500/20 p-6 relative z-10"
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.2 }}
+        >
+          <AnimatePresence>
+            {imagePreview && (
+              <motion.div 
+                className="mb-4 relative inline-block"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.8 }}
+                transition={{ type: "spring", stiffness: 300 }}
               >
-                <X className="w-3 h-3 text-white" />
-              </Button>
-            </div>
-          )}
+                <img
+                  src={imagePreview}
+                  alt="Upload preview"
+                  className="w-20 h-20 object-cover rounded-2xl border-2 border-purple-400/50 shadow-lg"
+                />
+                <motion.button
+                  className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg"
+                  onClick={removeImage}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <X className="w-4 h-4 text-white" />
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          <form onSubmit={handleSubmit} className="flex gap-2">
+          <form onSubmit={handleSubmit} className="flex gap-4">
             <div className="flex-1 relative">
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-2xl blur-xl"
+                animate={{ opacity: [0.5, 0.8, 0.5] }}
+                transition={{ duration: 3, repeat: Infinity }}
+              />
               <textarea
                 ref={inputRef}
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value)
-                  // Auto-resize textarea
                   const textarea = e.target as HTMLTextAreaElement
                   textarea.style.height = "auto"
-                  textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px"
+                  textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px"
                 }}
                 placeholder="Type your message..."
-                className="w-full min-h-[48px] max-h-32 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/50 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50"
+                className="w-full min-h-[60px] max-h-32 bg-slate-900/50 backdrop-blur-xl border border-purple-500/30 rounded-2xl px-6 py-4 text-white placeholder-white/50 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 transition-all duration-300 relative z-10"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault()
@@ -835,54 +1172,58 @@ export default function Home() {
                   }
                 }}
                 onFocus={() => {
-                  // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
                   if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 300)
+                    setTimeout(() => scrollToBottom(), 300)
                   }
                 }}
                 onBlur={() => {
-                  // Small delay to handle keyboard closing only if user is at bottom
                   if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 100)
+                    setTimeout(() => scrollToBottom(), 100)
                   }
                 }}
                 rows={1}
                 style={{
                   scrollbarWidth: "none",
                   msOverflowStyle: "none",
-                  minHeight: "48px",
+                  minHeight: "60px",
                   lineHeight: "1.5",
                 }}
               />
-              <Button
+              <motion.button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-2 text-white/60 hover:text-white hover:bg-white/10"
+                className="absolute right-3 top-3 text-white/60 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-all duration-200"
                 onClick={() => fileInputRef.current?.click()}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
               >
-                <ImageIcon className="w-4 h-4" />
-              </Button>
+                <ImageIcon className="w-5 h-5" />
+              </motion.button>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
             </div>
 
-            <Button
+            <motion.button
               type="submit"
               disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-600 disabled:to-gray-700 text-white rounded-2xl px-8 py-4 h-[60px] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl border border-purple-400/30 backdrop-blur-xl transition-all duration-300"
+              whileHover={{ 
+                scale: 1.05,
+                boxShadow: "0 20px 40px rgba(147, 51, 234, 0.3)"
+              }}
+              whileTap={{ scale: 0.95 }}
             >
               {isLoading || sendStreamingMessageMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                >
+                  <Loader2 className="w-6 h-6" />
+                </motion.div>
               ) : (
-                <Send className="w-4 h-4" />
+                <Send className="w-6 h-6" />
               )}
-            </Button>
+            </motion.button>
           </form>
-        </div>
+        </motion.div>
       </div>
       
       {/* API Status Monitor */}
