@@ -154,19 +154,21 @@ export default function Home() {
       }, 150)
     }
 
-    // Handle keyboard by scrolling page instead of moving input bar
-    const handleKeyboardScroll = () => {
-      // Auto-scroll to ensure input is visible when keyboard opens
-      if (!showScrollButton) {
+    // Handle keyboard by adjusting chat container padding instead of moving input bar
+    const adjustChatForKeyboard = (keyboardHeight: number) => {
+      const chatContainer = chatContainerRef.current
+      if (!chatContainer) return
+
+      if (keyboardHeight > 50) {
+        // Keyboard is open - add bottom padding to chat container
+        chatContainer.style.paddingBottom = `${keyboardHeight + 20}px`
+        // Scroll to bottom to show input above keyboard
         setTimeout(() => {
-          scrollToBottom()
-          // Additional scroll to ensure input is fully visible
-          setTimeout(() => {
-            if (chatContainerRef.current) {
-              chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
-            }
-          }, 100)
-        }, 300)
+          chatContainer.scrollTop = chatContainer.scrollHeight
+        }, 100)
+      } else {
+        // Keyboard is closed - reset padding
+        chatContainer.style.paddingBottom = 'calc(40px + var(--safe-area-inset-bottom))'
       }
     }
 
@@ -177,9 +179,7 @@ export default function Home() {
         const windowHeight = window.innerHeight
         const keyboardHeight = windowHeight - visibleHeight
         
-        if (keyboardHeight > 50) { // Keyboard is open
-          handleKeyboardScroll()
-        }
+        adjustChatForKeyboard(keyboardHeight)
       }
 
       window.visualViewport.addEventListener('resize', handleViewportChange)
@@ -195,9 +195,7 @@ export default function Home() {
         const currentHeight = window.innerHeight
         const keyboardHeight = initialHeight - currentHeight
         
-        if (keyboardHeight > 100) { // Keyboard is open
-          handleKeyboardScroll()
-        }
+        adjustChatForKeyboard(keyboardHeight)
       }
 
       window.addEventListener("resize", handleResize)
@@ -948,18 +946,12 @@ export default function Home() {
                 }
               }}
               onFocus={() => {
-                // When input is focused, ensure it's visible by scrolling
+                // Simple scroll to bottom when input is focused
                 setTimeout(() => {
                   if (chatContainerRef.current) {
                     chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
                   }
-                  // Additional delay for keyboard to open
-                  setTimeout(() => {
-                    if (chatContainerRef.current) {
-                      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
-                    }
-                  }, 300)
-                }, 100)
+                }, 200)
               }}
               rows={1}
               disabled={isLoading || sendStreamingMessageMutation.isPending}

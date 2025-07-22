@@ -208,8 +208,10 @@ input, textarea, select {
   bottom: var(--input-height);
   padding: 20px;
   padding-top: calc(20px + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(40px + var(--safe-area-inset-bottom)); /* Extra padding for keyboard */
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   scroll-behavior: smooth;
+  /* Ensure smooth transitions for padding changes */
+  transition: padding-bottom 0.2s ease-out;
 }
 
 .app-input {
@@ -227,6 +229,8 @@ input, textarea, select {
   z-index: 1001;
   flex-shrink: 0;
   /* Keep input bar fixed at bottom - no movement */
+  /* Ensure it stays above viewport bottom on mobile */
+  min-height: env(safe-area-inset-bottom, 0px);
 }
 
 /* iOS specific fixes */
@@ -695,8 +699,7 @@ textarea {
     padding: 16px;
     top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
     bottom: calc(var(--input-height) + env(safe-area-inset-bottom, 0px));
-    /* Extra scroll space for keyboard scenarios */
-    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-input {
