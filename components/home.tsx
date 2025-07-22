@@ -161,14 +161,26 @@ export default function Home() {
 
       if (keyboardHeight > 50) {
         // Keyboard is open - add bottom padding to chat container
-        chatContainer.style.paddingBottom = `${keyboardHeight + 20}px`
+        // Different padding for mobile vs desktop
+        const isSmallScreen = window.innerWidth <= 768
+        const extraPadding = isSmallScreen ? 16 : 20
+        chatContainer.style.paddingBottom = `${keyboardHeight + extraPadding}px`
+        
         // Scroll to bottom to show input above keyboard
-        setTimeout(() => {
-          chatContainer.scrollTop = chatContainer.scrollHeight
-        }, 100)
+        // Use requestAnimationFrame for smoother scrolling
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            chatContainer.scrollTop = chatContainer.scrollHeight
+          }, 150)
+        })
       } else {
-        // Keyboard is closed - reset padding
-        chatContainer.style.paddingBottom = 'calc(40px + var(--safe-area-inset-bottom))'
+        // Keyboard is closed - reset padding based on screen size
+        const isSmallScreen = window.innerWidth <= 768
+        if (isSmallScreen) {
+          chatContainer.style.paddingBottom = 'calc(16px + env(safe-area-inset-bottom, 0px))'
+        } else {
+          chatContainer.style.paddingBottom = 'calc(20px + env(safe-area-inset-bottom, 0px))'
+        }
       }
     }
 

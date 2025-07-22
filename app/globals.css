@@ -238,6 +238,11 @@ input, textarea, select {
   .app-input {
     position: fixed;
     bottom: env(safe-area-inset-bottom, 0px);
+    /* Additional iOS stability fixes */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
   }
 }
 
@@ -248,6 +253,10 @@ input, textarea, select {
   gap: 20px;
   padding-bottom: 20px;
   min-height: 100%;
+  /* Ensure smooth scrolling behavior */
+  scroll-behavior: smooth;
+  /* Prevent content from jumping during keyboard events */
+  contain: layout style paint;
 }
 
 /* Improved message styling */
@@ -774,6 +783,10 @@ textarea {
   padding: 40px 20px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  /* Ensure smooth scrolling behavior */
+  scroll-behavior: smooth;
+  /* Prevent content from jumping during keyboard events */
+  contain: layout style paint;
 }
 
 /* Mobile welcome screen adjustments */
@@ -898,6 +911,13 @@ textarea {
   -webkit-transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+  /* Additional stability for mobile */
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  z-index: 1;
 }
 
 .chat-input::-webkit-scrollbar {
