@@ -154,33 +154,35 @@ export default function Home() {
       }, 150)
     }
 
-    // Handle keyboard by adjusting chat container padding instead of moving input bar
-    const adjustChatForKeyboard = (keyboardHeight: number) => {
+    // Handle keyboard by moving input above it and adjusting chat container
+    const adjustForKeyboard = (keyboardHeight: number) => {
       const chatContainer = chatContainerRef.current
-      if (!chatContainer) return
+      const inputElement = document.querySelector('.app-input') as HTMLElement
+      
+      if (!chatContainer || !inputElement) return
 
       if (keyboardHeight > 50) {
-        // Keyboard is open - add bottom padding to chat container
-        // Different padding for mobile vs desktop
-        const isSmallScreen = window.innerWidth <= 768
-        const extraPadding = isSmallScreen ? 16 : 20
-        chatContainer.style.paddingBottom = `${keyboardHeight + extraPadding}px`
+        // Keyboard is open - move input above keyboard and adjust chat container
+        document.body.classList.add('keyboard-open')
+        inputElement.style.bottom = `${keyboardHeight}px`
+        inputElement.style.transition = 'bottom 0.2s ease-out'
         
-        // Scroll to bottom to show input above keyboard
-        // Use requestAnimationFrame for smoother scrolling
-        requestAnimationFrame(() => {
-          setTimeout(() => {
-            chatContainer.scrollTop = chatContainer.scrollHeight
-          }, 150)
-        })
+        // Adjust chat container bottom to account for input position
+        chatContainer.style.bottom = `${keyboardHeight + 80}px` // 80px = approximate input height
+        chatContainer.style.transition = 'bottom 0.2s ease-out'
+        
+        // Scroll to bottom after adjustment
+        setTimeout(() => {
+          chatContainer.scrollTop = chatContainer.scrollHeight
+        }, 250)
       } else {
-        // Keyboard is closed - reset padding based on screen size
-        const isSmallScreen = window.innerWidth <= 768
-        if (isSmallScreen) {
-          chatContainer.style.paddingBottom = 'calc(16px + env(safe-area-inset-bottom, 0px))'
-        } else {
-          chatContainer.style.paddingBottom = 'calc(20px + env(safe-area-inset-bottom, 0px))'
-        }
+        // Keyboard is closed - reset positions
+        document.body.classList.remove('keyboard-open')
+        inputElement.style.bottom = '0px'
+        inputElement.style.transition = 'bottom 0.2s ease-out'
+        
+        chatContainer.style.bottom = 'var(--input-height)'
+        chatContainer.style.transition = 'bottom 0.2s ease-out'
       }
     }
 
@@ -191,7 +193,7 @@ export default function Home() {
         const windowHeight = window.innerHeight
         const keyboardHeight = windowHeight - visibleHeight
         
-        adjustChatForKeyboard(keyboardHeight)
+        adjustForKeyboard(keyboardHeight)
       }
 
       window.visualViewport.addEventListener('resize', handleViewportChange)
@@ -207,7 +209,7 @@ export default function Home() {
         const currentHeight = window.innerHeight
         const keyboardHeight = initialHeight - currentHeight
         
-        adjustChatForKeyboard(keyboardHeight)
+        adjustForKeyboard(keyboardHeight)
       }
 
       window.addEventListener("resize", handleResize)
@@ -958,12 +960,29 @@ export default function Home() {
                 }
               }}
               onFocus={() => {
-                // Simple scroll to bottom when input is focused
+                // Force scroll to bottom and ensure input is visible
                 setTimeout(() => {
                   if (chatContainerRef.current) {
                     chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
                   }
-                }, 200)
+                  // Additional delay for mobile keyboard
+                  setTimeout(() => {
+                    if (chatContainerRef.current) {
+                      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+                    }
+                  }, 300)
+                }, 100)
+              }}
+              onBlur={() => {
+                // Reset positions when input loses focus
+                setTimeout(() => {
+                  const inputElement = document.querySelector('.app-input') as HTMLElement
+                  const chatContainer = chatContainerRef.current
+                  if (inputElement && chatContainer) {
+                    inputElement.style.bottom = '0px'
+                    chatContainer.style.bottom = 'var(--input-height)'
+                  }
+                }, 300)
               }}
               rows={1}
               disabled={isLoading || sendStreamingMessageMutation.isPending}

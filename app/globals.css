@@ -177,6 +177,14 @@ input, textarea, select {
   overflow: hidden;
 }
 
+/* Keyboard open state - prevent body scroll */
+body.keyboard-open {
+  position: fixed;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
 .app-header {
   height: var(--header-height);
   background: rgba(0, 0, 0, 0.2);
@@ -228,7 +236,8 @@ input, textarea, select {
   right: 0;
   z-index: 1001;
   flex-shrink: 0;
-  /* Keep input bar fixed at bottom - no movement */
+  /* Allow smooth transitions for keyboard adjustments */
+  transition: bottom 0.2s ease-out;
   /* Ensure it stays above viewport bottom on mobile */
   min-height: env(safe-area-inset-bottom, 0px);
 }
