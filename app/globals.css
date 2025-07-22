@@ -217,9 +217,10 @@ body.keyboard-open {
   padding: 20px;
   padding-top: calc(20px + env(safe-area-inset-top, 0px));
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-  scroll-behavior: smooth;
-  /* Ensure smooth transitions for padding changes */
-  transition: padding-bottom 0.2s ease-out;
+  /* Remove scroll-behavior to prevent auto-scroll interference */
+  /* scroll-behavior: smooth; */
+  /* Smooth transitions for position changes */
+  transition: bottom 0.2s ease-out;
 }
 
 .app-input {
@@ -262,8 +263,8 @@ body.keyboard-open {
   gap: 20px;
   padding-bottom: 20px;
   min-height: 100%;
-  /* Ensure smooth scrolling behavior */
-  scroll-behavior: smooth;
+  /* Remove scroll-behavior to prevent auto-scroll */
+  /* scroll-behavior: smooth; */
   /* Prevent content from jumping during keyboard events */
   contain: layout style paint;
 }
@@ -792,8 +793,8 @@ textarea {
   padding: 40px 20px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  /* Ensure smooth scrolling behavior */
-  scroll-behavior: smooth;
+  /* Remove scroll-behavior to prevent auto-scroll */
+  /* scroll-behavior: smooth; */
   /* Prevent content from jumping during keyboard events */
   contain: layout style paint;
 }

@@ -146,15 +146,10 @@ export default function Home() {
     // Handle viewport changes (keyboard open/close)
     const handleResize = () => {
       setVH()
-      // Small delay to ensure the viewport has settled
-      setTimeout(() => {
-        if (!showScrollButton) {
-          scrollToBottom()
-        }
-      }, 150)
+      // NO AUTO SCROLL - let keyboard positioning handle everything
     }
 
-    // Handle keyboard by moving input above it and adjusting chat container
+    // Handle keyboard by moving input above it and adjusting chat container - NO AUTO SCROLL
     const adjustForKeyboard = (keyboardHeight: number) => {
       const chatContainer = chatContainerRef.current
       const inputElement = document.querySelector('.app-input') as HTMLElement
@@ -171,10 +166,7 @@ export default function Home() {
         chatContainer.style.bottom = `${keyboardHeight + 80}px` // 80px = approximate input height
         chatContainer.style.transition = 'bottom 0.2s ease-out'
         
-        // Scroll to bottom after adjustment
-        setTimeout(() => {
-          chatContainer.scrollTop = chatContainer.scrollHeight
-        }, 250)
+        // NO AUTOMATIC SCROLLING - let the positioning handle visibility
       } else {
         // Keyboard is closed - reset positions
         document.body.classList.remove('keyboard-open')
@@ -960,18 +952,7 @@ export default function Home() {
                 }
               }}
               onFocus={() => {
-                // Force scroll to bottom and ensure input is visible
-                setTimeout(() => {
-                  if (chatContainerRef.current) {
-                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
-                  }
-                  // Additional delay for mobile keyboard
-                  setTimeout(() => {
-                    if (chatContainerRef.current) {
-                      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
-                    }
-                  }, 300)
-                }, 100)
+                // NO AUTO SCROLL - let keyboard positioning handle visibility naturally
               }}
               onBlur={() => {
                 // Reset positions when input loses focus
