@@ -157,28 +157,35 @@ export default function Home() {
     // Handle visual viewport API if available (better for mobile keyboards)
     if (window.visualViewport) {
       const handleViewportChange = () => {
-        const keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height)
-        document.documentElement.style.setProperty("--keyboard-height", `${keyboardHeight}px`)
-        
-        // Position input bar directly attached to keyboard
         const inputElement = document.querySelector('.app-input') as HTMLElement
-        if (inputElement) {
-          if (keyboardHeight > 0) {
-            // Keyboard is open - attach input directly to keyboard edge
-            // Use minimal offset only if needed for visual clarity
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-            const offset = isIOS ? Math.max(0, keyboardHeight - 5) : Math.max(0, keyboardHeight - 8)
-            inputElement.style.transform = `translateY(-${offset}px)`
-            inputElement.style.transition = 'transform 0.25s ease-out'
-          } else {
-            // Keyboard is closed - reset position
-            inputElement.style.transform = 'translateY(0)'
-            inputElement.style.transition = 'transform 0.25s ease-out'
-          }
+        if (!inputElement) return
+        
+        // Get the actual visible area
+        const visibleHeight = window.visualViewport.height
+        const windowHeight = window.innerHeight
+        const keyboardHeight = windowHeight - visibleHeight
+        
+        if (keyboardHeight > 50) { // Keyboard is open (threshold for detecting keyboard)
+          // Position input bar right at the bottom of visible area
+          // This ensures it sits directly above the keyboard
+          inputElement.style.position = 'fixed'
+          inputElement.style.bottom = `${keyboardHeight}px`
+          inputElement.style.left = '0'
+          inputElement.style.right = '0'
+          inputElement.style.transform = 'none'
+          inputElement.style.transition = 'bottom 0.2s ease-out'
+        } else {
+          // Keyboard is closed - reset to bottom
+          inputElement.style.position = 'fixed'
+          inputElement.style.bottom = '0px'
+          inputElement.style.left = '0'
+          inputElement.style.right = '0'
+          inputElement.style.transform = 'none'
+          inputElement.style.transition = 'bottom 0.2s ease-out'
         }
         
         // Scroll to bottom when keyboard opens
-        if (!showScrollButton && keyboardHeight > 0) {
+        if (!showScrollButton && keyboardHeight > 50) {
           setTimeout(() => scrollToBottom(), 150)
         }
       }
@@ -194,22 +201,28 @@ export default function Home() {
       }
     } else {
       // Fallback for browsers without visual viewport API
+      let initialHeight = window.innerHeight
       const handleKeyboard = () => {
-        // Use a simple heuristic for keyboard detection
-        const heightDiff = window.screen.height - window.innerHeight
-        const keyboardHeight = heightDiff > 150 ? heightDiff : 0
+        const currentHeight = window.innerHeight
+        const keyboardHeight = initialHeight - currentHeight
         
         const inputElement = document.querySelector('.app-input') as HTMLElement
-        if (inputElement && keyboardHeight > 0) {
-          // Attach to keyboard edge with minimal offset
-          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-          const maxHeight = Math.min(keyboardHeight, 300)
-          const offset = isIOS ? Math.max(0, maxHeight - 5) : Math.max(0, maxHeight - 8)
-          inputElement.style.transform = `translateY(-${offset}px)`
-          inputElement.style.transition = 'transform 0.25s ease-out'
-        } else if (inputElement) {
-          inputElement.style.transform = 'translateY(0)'
-          inputElement.style.transition = 'transform 0.25s ease-out'
+        if (!inputElement) return
+        
+        if (keyboardHeight > 100) { // Keyboard is open
+          inputElement.style.position = 'fixed'
+          inputElement.style.bottom = `${keyboardHeight}px`
+          inputElement.style.left = '0'
+          inputElement.style.right = '0'
+          inputElement.style.transform = 'none'
+          inputElement.style.transition = 'bottom 0.2s ease-out'
+        } else {
+          inputElement.style.position = 'fixed'
+          inputElement.style.bottom = '0px'
+          inputElement.style.left = '0'
+          inputElement.style.right = '0'
+          inputElement.style.transform = 'none'
+          inputElement.style.transition = 'bottom 0.2s ease-out'
         }
       }
 

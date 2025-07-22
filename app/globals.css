@@ -228,7 +228,7 @@ input, textarea, select {
   flex-shrink: 0;
   /* Enhanced mobile keyboard handling */
   transform: translateY(0);
-  transition: transform 0.25s ease-out;
+  transition: transform 0.2s ease-out;
   /* Ensure it stays attached to keyboard */
   will-change: transform;
 }
