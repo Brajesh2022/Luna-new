@@ -2,8 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* Enhanced Color Palette */
+  --primary-purple: #8B5CF6;
+  --primary-blue: #3B82F6;
+  --primary-indigo: #6366F1;
+  --accent-pink: #EC4899;
+  --accent-cyan: #06B6D4;
+  
+  /* Gradients */
+  --gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-secondary: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  --gradient-tertiary: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  --gradient-aurora: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+  
+  /* Shadows */
+  --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.3);
+  --shadow-glow-intense: 0 0 40px rgba(139, 92, 246, 0.5);
+  --shadow-card: 0 8px 32px rgba(0, 0, 0, 0.3);
+  --shadow-floating: 0 20px 60px rgba(139, 92, 246, 0.2);
+  
+  /* Animation Durations */
+  --duration-fast: 0.2s;
+  --duration-normal: 0.3s;
+  --duration-slow: 0.6s;
+  
+  /* Blur Effects */
+  --blur-light: blur(10px);
+  --blur-medium: blur(20px);
+  --blur-heavy: blur(40px);
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 @layer utilities {
@@ -105,7 +143,38 @@ body {
   }
 }
 
-/* Custom scrollbar */
+/* Enhanced Scrollbar */
+.scrollbar-enhanced::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-enhanced::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  margin: 4px 0;
+}
+
+.scrollbar-enhanced::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, 
+    rgba(139, 92, 246, 0.6) 0%, 
+    rgba(59, 130, 246, 0.4) 50%, 
+    rgba(99, 102, 241, 0.6) 100%
+  );
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all var(--duration-normal) ease;
+}
+
+.scrollbar-enhanced::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, 
+    rgba(139, 92, 246, 0.8) 0%, 
+    rgba(59, 130, 246, 0.6) 50%, 
+    rgba(99, 102, 241, 0.8) 100%
+  );
+  box-shadow: var(--shadow-glow);
+}
+
+/* Custom scrollbar (legacy support) */
 .scrollbar-thin::-webkit-scrollbar {
   width: 6px;
 }
@@ -144,7 +213,63 @@ body {
   scrollbar-color: rgba(124, 58, 237, 0.8) rgba(255, 255, 255, 0.05);
 }
 
-/* Markdown styling */
+/* Enhanced Markdown Styling */
+.markdown-enhanced {
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.markdown-enhanced p {
+  margin-bottom: 1rem;
+}
+
+.markdown-enhanced p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-enhanced strong {
+  font-weight: 600;
+  color: #f3e8ff;
+  text-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+}
+
+.markdown-enhanced em {
+  font-style: italic;
+  color: #e9d5ff;
+}
+
+.markdown-enhanced code {
+  background: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  padding: 0.2rem 0.4rem;
+  border-radius: calc(var(--radius) * 0.5);
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  font-size: 0.9em;
+  color: #ddd6fe;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.markdown-enhanced pre {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  padding: 1rem;
+  border-radius: var(--radius);
+  overflow-x: auto;
+  margin: 1rem 0;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: var(--blur-light);
+  -webkit-backdrop-filter: var(--blur-light);
+}
+
+.markdown-enhanced pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: #f3e8ff;
+  box-shadow: none;
+}
+
+/* Legacy Markdown styling */
 .markdown-content {
   line-height: 1.6;
   color: rgba(255, 255, 255, 0.9);
