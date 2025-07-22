@@ -133,6 +133,56 @@ export default function Home() {
     inputRef.current?.focus()
   }, [])
 
+  // Handle mobile viewport and keyboard
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01
+      document.documentElement.style.setProperty("--vh", `${vh}px`)
+    }
+
+    // Set initial viewport height
+    setVH()
+
+    // Handle viewport changes (keyboard open/close)
+    const handleResize = () => {
+      setVH()
+      // Small delay to ensure the viewport has settled
+      setTimeout(() => {
+        if (!showScrollButton) {
+          scrollToBottom()
+        }
+      }, 150)
+    }
+
+    // Handle visual viewport API if available (better for mobile keyboards)
+    if (window.visualViewport) {
+      const handleViewportChange = () => {
+        const keyboardHeight = window.innerHeight - window.visualViewport.height
+        document.documentElement.style.setProperty("--keyboard-height", `${keyboardHeight}px`)
+        
+        // Scroll to bottom when keyboard opens
+        if (!showScrollButton && keyboardHeight > 0) {
+          setTimeout(() => scrollToBottom(), 100)
+        }
+      }
+
+      window.visualViewport.addEventListener('resize', handleViewportChange)
+      
+      return () => {
+        window.removeEventListener("resize", handleResize)
+        window.visualViewport?.removeEventListener('resize', handleViewportChange)
+      }
+    } else {
+      window.addEventListener("resize", handleResize)
+      window.addEventListener("orientationchange", handleResize)
+      
+      return () => {
+        window.removeEventListener("resize", handleResize)
+        window.removeEventListener("orientationchange", handleResize)
+      }
+    }
+  }, [showScrollButton, scrollToBottom])
+
   // Set active conversation when conversations load
   useEffect(() => {
     if (conversations.length > 0 && !activeConversation) {
