@@ -157,14 +157,29 @@ export default function Home() {
     // Handle visual viewport API if available (better for mobile keyboards)
     if (window.visualViewport) {
       const handleViewportChange = () => {
-        const keyboardHeight = window.innerHeight - window.visualViewport.height
+        const keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height)
         document.documentElement.style.setProperty("--keyboard-height", `${keyboardHeight}px`)
+        
+        // Position input bar above keyboard
+        const inputElement = document.querySelector('.app-input') as HTMLElement
+        if (inputElement) {
+          if (keyboardHeight > 0) {
+            // Keyboard is open - move input above it
+            inputElement.style.transform = `translateY(-${keyboardHeight}px)`
+          } else {
+            // Keyboard is closed - reset position
+            inputElement.style.transform = 'translateY(0)'
+          }
+        }
         
         // Scroll to bottom when keyboard opens
         if (!showScrollButton && keyboardHeight > 0) {
-          setTimeout(() => scrollToBottom(), 100)
+          setTimeout(() => scrollToBottom(), 150)
         }
       }
+
+      // Initial call
+      handleViewportChange()
 
       window.visualViewport.addEventListener('resize', handleViewportChange)
       
@@ -173,11 +188,27 @@ export default function Home() {
         window.visualViewport?.removeEventListener('resize', handleViewportChange)
       }
     } else {
+      // Fallback for browsers without visual viewport API
+      const handleKeyboard = () => {
+        // Use a simple heuristic for keyboard detection
+        const heightDiff = window.screen.height - window.innerHeight
+        const keyboardHeight = heightDiff > 150 ? heightDiff : 0
+        
+        const inputElement = document.querySelector('.app-input') as HTMLElement
+        if (inputElement && keyboardHeight > 0) {
+          inputElement.style.transform = `translateY(-${Math.min(keyboardHeight, 300)}px)`
+        } else if (inputElement) {
+          inputElement.style.transform = 'translateY(0)'
+        }
+      }
+
       window.addEventListener("resize", handleResize)
+      window.addEventListener("resize", handleKeyboard)
       window.addEventListener("orientationchange", handleResize)
       
       return () => {
         window.removeEventListener("resize", handleResize)
+        window.removeEventListener("resize", handleKeyboard)
         window.removeEventListener("orientationchange", handleResize)
       }
     }
@@ -540,11 +571,11 @@ export default function Home() {
 
     if (!input.trim() && !selectedImage) return
 
-    console.log("Form submitted with input:", input)
+
 
     // Create conversation if none exists
     if (!activeConversation) {
-      console.log("No active conversation, creating new one")
+
       const newConversation = await createConversationMutation.mutateAsync("New Conversation")
       setActiveConversation(newConversation.id)
       // Wait a bit for the conversation to be set
@@ -644,11 +675,7 @@ export default function Home() {
     textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px"
   }
 
-  console.log("Render - Server messages count:", messages.length)
-  console.log("Render - Local messages count:", localMessages.length)
-  console.log("Render - All messages count:", allMessages.length)
-  console.log("Render - Active conversation:", activeConversation)
-  console.log("Render - Show suggestions:", showSuggestions)
+
 
   return (
     <div className="app-container">
