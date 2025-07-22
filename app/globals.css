@@ -390,46 +390,17 @@ body {
     min-height: -webkit-fill-available;
   }
 
-  .mobile-safe {
-    /* Add safe area padding for mobile devices */
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
-  }
 
-  .mobile-header {
-    /* Ensure header stays above mobile browsers */
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    padding-top: env(safe-area-inset-top);
-  }
+}
 
-  .mobile-input {
-    /* Ensure input stays above mobile keyboards */
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 100;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    padding-bottom: env(safe-area-inset-bottom);
-  }
+/* Enhanced scrollbar styling */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
 
-  .mobile-content {
-    /* Account for fixed header and input */
-    padding-top: calc(110px + env(safe-area-inset-top));
-    padding-bottom: calc(110px + env(safe-area-inset-bottom));
-    height: calc(100vh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* Fix for mobile Chrome and other mobile browsers */
@@ -439,13 +410,13 @@ body {
   }
 }
 
-/* Ensure the app takes up the full height on mobile */
+/* Better mobile viewport handling */
 html,
 body {
-  height: 100%;
-  position: fixed;
-  overflow: hidden;
-  width: 100%;
+  height: 100vh;
+  height: 100dvh; /* Dynamic viewport height */
+  margin: 0;
+  padding: 0;
 }
 
 /* Improved scrolling for mobile */
@@ -551,4 +522,79 @@ textarea {
 .streaming-text p:not(:last-child)::after {
   content: "\A";
   white-space: pre;
+}
+
+/* Enhanced prose styling for markdown content */
+.prose-invert {
+  color: #f8fafc;
+}
+
+.prose-invert h1,
+.prose-invert h2,
+.prose-invert h3,
+.prose-invert h4,
+.prose-invert h5,
+.prose-invert h6 {
+  color: #f1f5f9;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose-invert h1:first-child,
+.prose-invert h2:first-child,
+.prose-invert h3:first-child {
+  margin-top: 0;
+}
+
+.prose-invert strong {
+  color: #f1f5f9;
+  font-weight: 600;
+}
+
+.prose-invert a {
+  color: #a855f7;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.prose-invert a:hover {
+  color: #c084fc;
+}
+
+.prose-invert blockquote {
+  border-left: 4px solid rgba(168, 85, 247, 0.5);
+  padding-left: 1rem;
+  font-style: italic;
+  color: #cbd5e1;
+  margin: 1rem 0;
+}
+
+.prose-invert ul,
+.prose-invert ol {
+  color: #f8fafc;
+  padding-left: 1.5rem;
+}
+
+.prose-invert li {
+  margin: 0.25rem 0;
+}
+
+.prose-invert p {
+  margin: 0.75rem 0;
+  line-height: 1.6;
+}
+
+.prose-invert code {
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 0.2rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+  color: #e879f9;
+}
+
+/* Glass morphism effects */
+.glass-morphism {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
