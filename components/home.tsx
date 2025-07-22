@@ -1,13 +1,12 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
+import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown, Bot, User, Sparkles, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from "framer-motion"
 import { TopicSuggestion } from "@/components/topic-suggestion"
 import ReactMarkdown from "react-markdown"
 import { CodeBlock } from "@/components/code-block"
@@ -22,15 +21,17 @@ import { Toaster } from "@/components/ui/sonner"
 import { getScrollPosition } from "@/lib/smooth-scroll"
 import ImageGenerationAnimation from "@/components/image-generation-animation"
 
-// Simplified topic suggestions
+// Simple topic suggestions
 const TOPIC_SUGGESTIONS = [
   "Write a short story about a time traveler",
-  "Help me draft a professional email",
+  "Help me draft a professional email", 
   "Explain quantum computing in simple terms",
   "Create a study plan for learning JavaScript",
   "Generate images of a beautiful sunset",
-  "How can I improve my presentation skills?",
+  "How can I improve my presentation skills?"
 ]
+
+
 
 export default function Home() {
   // State for messages and UI
@@ -41,120 +42,49 @@ export default function Home() {
   const [activeConversation, setActiveConversation] = useState<number | null>(null)
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null)
-  const [typingMessageId, setTypingMessageId] = useState<number | null>(null)
   const [localMessages, setLocalMessages] = useState<Message[]>([])
   const [streamingMessage, setStreamingMessage] = useState<string>("")
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
   const [isCreatingImages, setIsCreatingImages] = useState(false)
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const queryClient = useQueryClient()
 
-  // Query for conversations
+  // Queries
   const { data: conversations = [] } = useQuery<Conversation[]>({
     queryKey: ["/api/conversations"],
   })
 
-  // Query for messages with more aggressive refetching
   const { data: messages = [], refetch: refetchMessages } = useQuery<Message[]>({
     queryKey: ["/api/conversations", activeConversation, "messages"],
     enabled: !!activeConversation,
-    staleTime: 0, // Always consider stale
-    gcTime: 0, // Don't cache
+    staleTime: 0,
+    gcTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   })
 
-  // Combine server messages with local messages
   const allMessages = [...messages, ...localMessages].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Simplified scroll handling
-  const updateScrollPosition = useCallback(() => {
-    if (!chatContainerRef.current) return
-    
-    const container = chatContainerRef.current
-    const position = getScrollPosition(container)
-    
-    setIsUserScrolledUp(!position.isAtBottom)
-  }, [])
-
-  // Simple scroll handler without throttling
-  const handleScroll = useCallback(() => {
-    updateScrollPosition()
-  }, [updateScrollPosition])
-
-  // Simple scroll to bottom function
-  const scrollToBottom = useCallback((force: boolean = false) => {
-    if (!messagesEndRef.current) return
-    
-    const shouldScroll = force || !isUserScrolledUp
-    
-    if (shouldScroll) {
-      // Use native smooth scrolling instead of custom animation
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: "smooth", 
-        block: "end",
-        inline: "nearest"
-      })
-      
-      // Update position after a short delay
-      setTimeout(() => {
-        updateScrollPosition()
-      }, 100)
-    }
-  }, [isUserScrolledUp, updateScrollPosition])
-
-  // Auto-scroll to bottom when messages change (only if user is at bottom)
-  useEffect(() => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current)
-    }
-    
-    scrollTimeoutRef.current = setTimeout(() => {
-      // Only auto-scroll if user is at bottom to prevent interrupting reading
-      if (!isUserScrolledUp) {
-        scrollToBottom()
-      }
-    }, 200)
-    
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
-    }
-  }, [allMessages, scrollToBottom, isUserScrolledUp])
-
-  // Auto-scroll to bottom for loading states (less aggressive)
-  useEffect(() => {
-    if ((isLoading || streamingMessage) && !isUserScrolledUp) {
-      scrollToBottom()
-    }
-  }, [isLoading, streamingMessage, scrollToBottom, isUserScrolledUp])
-
-  // Add scroll event listener
-  useEffect(() => {
-    const container = chatContainerRef.current
-    if (container) {
-      container.addEventListener('scroll', handleScroll)
-      return () => container.removeEventListener('scroll', handleScroll)
+  // Simple scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
   }, [])
 
-  // Focus input on load
+  // Auto-scroll effects
   useEffect(() => {
-    inputRef.current?.focus()
-  }, [])
+    scrollToBottom()
+  }, [allMessages, scrollToBottom])
 
-  // Set active conversation when conversations load
   useEffect(() => {
     if (conversations.length > 0 && !activeConversation) {
       setActiveConversation(conversations[0].id)
@@ -162,34 +92,15 @@ export default function Home() {
     }
   }, [conversations, activeConversation])
 
-  // Refetch messages when active conversation changes
   useEffect(() => {
     if (activeConversation) {
-      console.log("Active conversation changed, refetching messages for:", activeConversation)
-      setLocalMessages([]) // Clear local messages
-      setStreamingMessage("") // Clear streaming message
+      setLocalMessages([])
+      setStreamingMessage("")
       setStreamingMessageId(null)
       setIsCreatingImages(false)
       refetchMessages()
     }
   }, [activeConversation, refetchMessages])
-
-  // Fix for mobile viewport height issues
-  useEffect(() => {
-    const setVH = () => {
-      const vh = window.innerHeight * 0.01
-      document.documentElement.style.setProperty("--vh", `${vh}px`)
-    }
-
-    setVH()
-    window.addEventListener("resize", setVH)
-    window.addEventListener("orientationchange", setVH)
-
-    return () => {
-      window.removeEventListener("resize", setVH)
-      window.removeEventListener("orientationchange", setVH)
-    }
-  }, [])
 
   // Helper function to convert file to base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -455,12 +366,12 @@ export default function Home() {
     const file = e.target.files?.[0]
     if (file) {
       if (!file.type.startsWith("image/")) {
-        alert("Please upload an image file")
+        toast.error("Please upload an image file")
         return
       }
 
       if (file.size > 5 * 1024 * 1024) {
-        alert("Image size should be less than 5MB")
+        toast.error("Image size should be less than 5MB")
         return
       }
 
@@ -486,6 +397,7 @@ export default function Home() {
     navigator.clipboard.writeText(content)
     setCopiedMessageId(id)
     setTimeout(() => setCopiedMessageId(null), 2000)
+    toast.success("Message copied!")
   }
 
   // Custom renderer for code blocks
@@ -579,12 +491,10 @@ export default function Home() {
   }
 
   const handleNewConversation = () => {
-    console.log("Creating new conversation")
     createConversationMutation.mutate("New Conversation")
   }
 
   const handleTopicSelect = (topic: string) => {
-    console.log("Topic selected:", topic)
     setInput(topic)
     inputRef.current?.focus()
     setShowSuggestions(false)
@@ -607,89 +517,110 @@ export default function Home() {
     }
   }
 
-  console.log("Render - Server messages count:", messages.length)
-  console.log("Render - Local messages count:", localMessages.length)
-  console.log("Render - All messages count:", allMessages.length)
-  console.log("Render - Active conversation:", activeConversation)
-  console.log("Render - Show suggestions:", showSuggestions)
+  // Custom renderer for code blocks
+  const renderers = {
+    code({ node, inline, className, children, ...props }: any) {
+      const match = /language-(\w+)/.exec(className || "")
+      const language = match ? match[1] : "text"
+
+      if (!inline && match) {
+        return <CodeBlock language={language} value={String(children).replace(/\n$/, "")} />
+      }
+
+      return (
+        <code className={className} {...props}>
+          {children}
+        </code>
+      )
+    },
+  }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 mobile-safe">
-      {/* Header */}
-      <header className="mobile-header bg-black/20 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 flex flex-col">
+      {/* Fixed Header - No z-index conflicts */}
+      <header className="sticky top-0 bg-black/20 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
         <div className="flex items-center space-x-3">
           <Avatar className="w-10 h-10">
             <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-            <AvatarFallback>L</AvatarFallback>
+            <AvatarFallback className="bg-purple-600 text-white">
+              <Sparkles className="w-5 h-5" />
+            </AvatarFallback>
           </Avatar>
           <div>
             <h1 className="text-white font-semibold text-lg">Luna</h1>
             <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
           </div>
-                  </div>
-          <Button
-            onClick={handleNewConversation}
-            variant="ghost"
-            size="sm"
-            className="text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <PlusCircle className="w-4 h-4 mr-2" />
-            New Chat
-          </Button>
+        </div>
+        <Button
+          onClick={handleNewConversation}
+          variant="ghost"
+          size="sm"
+          className="text-white/80 hover:text-white hover:bg-white/10"
+        >
+          <PlusCircle className="w-4 h-4 mr-2" />
+          New Chat
+        </Button>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col mobile-content">
-        {/* Messages */}
+      {/* Main Content Area - Flexible height with proper padding */}
+      <div className="flex-1 flex flex-col">
+        {/* Messages Container - No fixed height issues */}
         <div 
-          ref={chatContainerRef} 
-          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" 
-          style={{ paddingBottom: '60px' }}
+          ref={chatContainerRef}
+          className="flex-1 overflow-y-auto px-4 py-6"
+          style={{ paddingBottom: '120px' }} // Space for input
         >
-          {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
-            <div className="flex flex-col items-center justify-center h-full space-y-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-                <Avatar className="w-20 h-20 mx-auto mb-4">
-                  <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                  <AvatarFallback>L</AvatarFallback>
-                </Avatar>
-                <h2 className="text-2xl font-semibold text-white mb-2">Welcome to Luna</h2>
-                <p className="text-white/60 mb-8">
-                  Your intelligent AI assistant created by Brajesh. How can I help you today?
-                </p>
-              </motion.div>
+                      {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
+              <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8">
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  className="text-center"
+                >
+                  <Avatar className="w-20 h-20 mx-auto mb-4">
+                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                    <AvatarFallback className="bg-purple-600 text-white">
+                      <Sparkles className="w-10 h-10" />
+                    </AvatarFallback>
+                  </Avatar>
+                  <h2 className="text-2xl font-semibold text-white mb-2">Welcome to Luna</h2>
+                  <p className="text-white/60 mb-8">
+                    Your intelligent AI assistant created by Brajesh. How can I help you today?
+                  </p>
+                </motion.div>
 
-              <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
-            </div>
-          ) : (
-            <AnimatePresence>
-              {allMessages.map((message, index) => {
-                console.log("Rendering message:", message.id, message.role, message.content.substring(0, 50))
-                return (
+                <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
+              </div>
+                      ) : (
+              <div className="space-y-6">
+                {allMessages.map((message) => (
                   <motion.div
                     key={message.id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
                     className={cn(
-                      "flex gap-4 message relative",
-                      message.role === "user" ? "justify-end" : "justify-start",
+                      "flex gap-3 group",
+                      message.role === "user" ? "justify-end" : "justify-start"
                     )}
                   >
+                    {/* Avatar for assistant */}
                     {message.role === "assistant" && (
                       <Avatar className="w-8 h-8 flex-shrink-0">
                         <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                        <AvatarFallback>L</AvatarFallback>
+                        <AvatarFallback className="bg-purple-600 text-white">
+                          <Bot className="w-4 h-4" />
+                        </AvatarFallback>
                       </Avatar>
                     )}
 
-                    <div
-                      className={cn(
-                        "message-container glass-morphism p-4 rounded-2xl",
-                        message.role === "user" ? "user-message text-white" : "assistant-message text-white",
-                      )}
-                    >
+                    {/* Message Content - NO CONFINED BOX for AI responses */}
+                    <div className={cn(
+                      "max-w-[80%] relative",
+                      message.role === "user" 
+                        ? "bg-purple-600/20 backdrop-blur-sm rounded-2xl p-4 border border-purple-400/30" 
+                        : "" // NO background box for AI responses
+                    )}>
+                      {/* User image if present */}
                       {message.role === "user" && message.imageData && (
                         <div className="mb-3">
                           <img
@@ -700,117 +631,109 @@ export default function Home() {
                         </div>
                       )}
                       
+                      {/* Message text - AI responses displayed directly */}
                       {message.role === "assistant" && isImageGenerationContent(message.content) ? (
                         <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
                       ) : (
-                        <div className="markdown-content">
+                        <div className={cn(
+                          "text-white prose prose-invert max-w-none",
+                          message.role === "assistant" ? "text-white/90" : ""
+                        )}>
                           <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
                         </div>
                       )}
 
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="message-copy-button"
+                      {/* Copy button */}
+                      <button
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 rounded bg-black/20 hover:bg-black/40 transition-all"
                         onClick={() => copyMessage(message.content, message.id)}
                       >
-                        {copiedMessageId === message.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      </Button>
+                        {copiedMessageId === message.id ? 
+                          <Check className="w-4 h-4 text-green-400" /> : 
+                          <Copy className="w-4 h-4 text-white/70" />
+                        }
+                      </button>
                     </div>
 
+                    {/* Avatar for user */}
                     {message.role === "user" && (
                       <Avatar className="w-8 h-8 flex-shrink-0">
                         <AvatarImage src="/images/user-avatar.jpg" alt="User" />
-                        <AvatarFallback>U</AvatarFallback>
+                        <AvatarFallback className="bg-blue-600 text-white">
+                          <User className="w-4 h-4" />
+                        </AvatarFallback>
                       </Avatar>
                     )}
                   </motion.div>
-                )
-              })}
-              
-              {/* Streaming message */}
-              {streamingMessageId && (streamingMessage || isCreatingImages) && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-4 justify-start"
-                >
-                  <Avatar className="w-8 h-8 flex-shrink-0">
-                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                    <AvatarFallback>L</AvatarFallback>
-                  </Avatar>
-                  <div className="glass-morphism rounded-2xl bg-black/20 text-white">
-                    {isCreatingImages ? (
-                      <ImageGenerationAnimation isVisible={isCreatingImages} />
-                    ) : (
-                      <div className="p-4">
-                        <div className="markdown-content">
-                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
+                ))}
+                
+                {/* Streaming message - AI response displayed directly */}
+                {streamingMessageId && (streamingMessage || isCreatingImages) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-3 justify-start"
+                  >
+                    <Avatar className="w-8 h-8 flex-shrink-0">
+                      <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                      <AvatarFallback className="bg-purple-600 text-white">
+                        <Bot className="w-4 h-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="max-w-[80%]">
+                      {isCreatingImages ? (
+                        <ImageGenerationAnimation isVisible={isCreatingImages} />
+                      ) : (
+                        <div className="text-white/90 prose prose-invert max-w-none">
+                          <ReactMarkdown components={renderers}>{streamingMessage}</ReactMarkdown>
+                          <span className="inline-block w-0.5 h-4 bg-purple-400 ml-1 animate-pulse" />
                         </div>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </>
+            )}
+          </AnimatePresence>
 
-          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 justify-start"
-            >
-              <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                <AvatarFallback>L</AvatarFallback>
-              </Avatar>
-              <div className="glass-morphism p-4 rounded-2xl bg-black/20">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  <span className="text-white/80">Luna is thinking...</span>
-                </div>
-              </div>
-            </motion.div>
-          )}
+                {/* Loading state */}
+                {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-3 justify-start"
+                  >
+                    <Avatar className="w-8 h-8 flex-shrink-0">
+                      <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                      <AvatarFallback className="bg-purple-600 text-white">
+                        <Bot className="w-4 h-4" />
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex items-center gap-2 text-white/80">
+                      <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
+                      <span>Luna is thinking...</span>
+                    </div>
+                  </motion.div>
+                )}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Scroll to Bottom Button */}
-        {isUserScrolledUp && (
-          <div className="fixed bottom-24 right-4 z-40">
-            <Button
-              onClick={() => {
-                setIsUserScrolledUp(false)
-                scrollToBottom(true)
-              }}
-              variant="default"
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg"
-            >
-              <ArrowDown className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-
-        {/* Input Area */}
-        <div className="mobile-input bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
+        {/* Fixed Input Area - Always visible, no conflicts */}
+        <div className="sticky bottom-0 bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
           {imagePreview && (
             <div className="mb-4 relative inline-block">
               <img
-                src={imagePreview || "/placeholder.svg"}
+                src={imagePreview}
                 alt="Upload preview"
                 className="w-16 h-16 object-cover rounded-lg border-2 border-purple-400/50"
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600"
+              <button
+                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center"
                 onClick={removeImage}
               >
                 <X className="w-3 h-3 text-white" />
-              </Button>
+              </button>
             </div>
           )}
 
@@ -821,59 +744,34 @@ export default function Home() {
                 value={input}
                 onChange={(e) => {
                   setInput(e.target.value)
-                  // Auto-resize textarea
                   const textarea = e.target as HTMLTextAreaElement
                   textarea.style.height = "auto"
-                  textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px"
+                  textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px"
                 }}
                 placeholder="Type your message..."
-                className="w-full min-h-[48px] max-h-32 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/50 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50"
+                className="w-full min-h-[48px] max-h-32 bg-white/10 border border-white/20 rounded-xl px-4 py-3 pr-12 text-white placeholder-white/50 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault()
                     handleSubmit(e)
                   }
                 }}
-                onFocus={() => {
-                  // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
-                  if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 300)
-                  }
-                }}
-                onBlur={() => {
-                  // Small delay to handle keyboard closing only if user is at bottom
-                  if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 100)
-                  }
-                }}
                 rows={1}
-                style={{
-                  scrollbarWidth: "none",
-                  msOverflowStyle: "none",
-                  minHeight: "48px",
-                  lineHeight: "1.5",
-                }}
               />
-              <Button
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-2 text-white/60 hover:text-white hover:bg-white/10"
+                className="absolute right-2 top-2 p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg"
                 onClick={() => fileInputRef.current?.click()}
               >
                 <ImageIcon className="w-4 h-4" />
-              </Button>
+              </button>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
             </div>
 
             <Button
               type="submit"
               disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50"
             >
               {isLoading || sendStreamingMessageMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
