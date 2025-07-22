@@ -14,24 +14,26 @@ export function TopicSuggestion({ examples, onSelect }: TopicSuggestionProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="bg-black/30 backdrop-blur-md rounded-xl p-4 border border-purple-500/30 hover:border-purple-400/50 transition-all duration-300"
+      className="w-full max-w-2xl mx-auto"
     >
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles size={16} className="text-purple-400" />
-        <h3 className="text-lg font-semibold text-white">Try asking</h3>
+      <div className="flex items-center gap-2 mb-4 justify-center">
+        <Sparkles size={18} className="text-purple-400" />
+        <h3 className="text-xl font-semibold text-white">Try asking</h3>
       </div>
-      <ul className="space-y-2">
+      <div className="suggestions-grid">
         {examples.map((example, idx) => (
-          <li key={idx}>
-            <button
-              onClick={() => onSelect(example)}
-              className="text-left w-full p-2 rounded-lg text-purple-200 hover:text-white hover:bg-purple-500/20 transition-all duration-200 text-sm"
-            >
-              {example}
-            </button>
-          </li>
+          <motion.button
+            key={idx}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: idx * 0.1 }}
+            onClick={() => onSelect(example)}
+            className="suggestion-card text-left"
+          >
+            <span className="text-white/90 text-sm font-medium">{example}</span>
+          </motion.button>
         ))}
-      </ul>
+      </div>
     </motion.div>
   )
 }

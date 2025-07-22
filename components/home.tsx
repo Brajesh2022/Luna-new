@@ -19,7 +19,6 @@ import TypingEffect from "@/components/typing-effect"
 import ApiStatus from "@/components/api-status"
 import { toast } from "sonner"
 import { Toaster } from "@/components/ui/sonner"
-import { getScrollPosition } from "@/lib/smooth-scroll"
 import ImageGenerationAnimation from "@/components/image-generation-animation"
 
 // Simplified topic suggestions
@@ -46,14 +45,13 @@ export default function Home() {
   const [streamingMessage, setStreamingMessage] = useState<string>("")
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
   const [isCreatingImages, setIsCreatingImages] = useState(false)
-  const [isUserScrolledUp, setIsUserScrolledUp] = useState(false)
+  const [showScrollButton, setShowScrollButton] = useState(false)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const queryClient = useQueryClient()
 
@@ -77,82 +75,146 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Simplified scroll handling
-  const updateScrollPosition = useCallback(() => {
+  // Smooth scroll handling with better performance
+  const checkScrollPosition = useCallback(() => {
     if (!chatContainerRef.current) return
     
     const container = chatContainerRef.current
-    const position = getScrollPosition(container)
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight
     
-    setIsUserScrolledUp(!position.isAtBottom)
+    setShowScrollButton(distanceFromBottom > 100)
   }, [])
 
-  // Simple scroll handler without throttling
-  const handleScroll = useCallback(() => {
-    updateScrollPosition()
-  }, [updateScrollPosition])
-
-  // Simple scroll to bottom function
-  const scrollToBottom = useCallback((force: boolean = false) => {
+  // Optimized scroll to bottom
+  const scrollToBottom = useCallback((smooth: boolean = true) => {
     if (!messagesEndRef.current) return
     
-    const shouldScroll = force || !isUserScrolledUp
-    
-    if (shouldScroll) {
-      // Use native smooth scrolling instead of custom animation
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: "smooth", 
-        block: "end",
-        inline: "nearest"
-      })
-      
-      // Update position after a short delay
-      setTimeout(() => {
-        updateScrollPosition()
-      }, 100)
-    }
-  }, [isUserScrolledUp, updateScrollPosition])
+    messagesEndRef.current.scrollIntoView({ 
+      behavior: smooth ? "smooth" : "auto",
+      block: "end",
+      inline: "nearest"
+    })
+  }, [])
 
-  // Auto-scroll to bottom when messages change (only if user is at bottom)
+  // Auto-scroll management
   useEffect(() => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current)
-    }
+    const shouldAutoScroll = !showScrollButton && (allMessages.length > 0 || streamingMessage || isLoading)
     
-    scrollTimeoutRef.current = setTimeout(() => {
-      // Only auto-scroll if user is at bottom to prevent interrupting reading
-      if (!isUserScrolledUp) {
-        scrollToBottom()
-      }
-    }, 200)
-    
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
+    if (shouldAutoScroll) {
+      // Small delay to ensure DOM is updated
+      const timer = setTimeout(() => scrollToBottom(), 100)
+      return () => clearTimeout(timer)
     }
-  }, [allMessages, scrollToBottom, isUserScrolledUp])
+  }, [allMessages, streamingMessage, isLoading, showScrollButton, scrollToBottom])
 
-  // Auto-scroll to bottom for loading states (less aggressive)
-  useEffect(() => {
-    if ((isLoading || streamingMessage) && !isUserScrolledUp) {
-      scrollToBottom()
-    }
-  }, [isLoading, streamingMessage, scrollToBottom, isUserScrolledUp])
-
-  // Add scroll event listener
+  // Scroll event listener with throttling
   useEffect(() => {
     const container = chatContainerRef.current
-    if (container) {
-      container.addEventListener('scroll', handleScroll)
-      return () => container.removeEventListener('scroll', handleScroll)
+    if (!container) return
+
+    let ticking = false
+    const handleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          checkScrollPosition()
+          ticking = false
+        })
+        ticking = true
+      }
     }
-  }, [])
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [checkScrollPosition])
 
   // Focus input on load
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  // Handle mobile viewport and keyboard
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01
+      document.documentElement.style.setProperty("--vh", `${vh}px`)
+    }
+
+    // Set initial viewport height
+    setVH()
+
+    // Handle viewport changes (keyboard open/close)
+    const handleResize = () => {
+      setVH()
+      // NO AUTO SCROLL - let keyboard positioning handle everything
+    }
+
+    // Handle keyboard by moving input above it and adjusting chat container - NO AUTO SCROLL
+    const adjustForKeyboard = (keyboardHeight: number) => {
+      const chatContainer = chatContainerRef.current
+      const inputElement = document.querySelector('.app-input') as HTMLElement
+      
+      if (!chatContainer || !inputElement) return
+
+      if (keyboardHeight > 50) {
+        // Keyboard is open - move input above keyboard and adjust chat container
+        document.body.classList.add('keyboard-open')
+        inputElement.style.bottom = `${keyboardHeight}px`
+        inputElement.style.transition = 'bottom 0.2s ease-out'
+        
+        // Adjust chat container bottom to account for input position
+        chatContainer.style.bottom = `${keyboardHeight + 80}px` // 80px = approximate input height
+        chatContainer.style.transition = 'bottom 0.2s ease-out'
+        
+        // NO AUTOMATIC SCROLLING - let the positioning handle visibility
+      } else {
+        // Keyboard is closed - reset positions
+        document.body.classList.remove('keyboard-open')
+        inputElement.style.bottom = '0px'
+        inputElement.style.transition = 'bottom 0.2s ease-out'
+        
+        chatContainer.style.bottom = 'var(--input-height)'
+        chatContainer.style.transition = 'bottom 0.2s ease-out'
+      }
+    }
+
+    // Handle visual viewport API if available (better for mobile keyboards)
+    if (window.visualViewport) {
+      const handleViewportChange = () => {
+        const visibleHeight = window.visualViewport.height
+        const windowHeight = window.innerHeight
+        const keyboardHeight = windowHeight - visibleHeight
+        
+        adjustForKeyboard(keyboardHeight)
+      }
+
+      window.visualViewport.addEventListener('resize', handleViewportChange)
+      
+      return () => {
+        window.removeEventListener("resize", handleResize)
+        window.visualViewport?.removeEventListener('resize', handleViewportChange)
+      }
+    } else {
+      // Fallback for browsers without visual viewport API
+      let initialHeight = window.innerHeight
+      const handleKeyboard = () => {
+        const currentHeight = window.innerHeight
+        const keyboardHeight = initialHeight - currentHeight
+        
+        adjustForKeyboard(keyboardHeight)
+      }
+
+      window.addEventListener("resize", handleResize)
+      window.addEventListener("resize", handleKeyboard)
+      window.addEventListener("orientationchange", handleResize)
+      
+      return () => {
+        window.removeEventListener("resize", handleResize)
+        window.removeEventListener("resize", handleKeyboard)
+        window.removeEventListener("orientationchange", handleResize)
+      }
+    }
+  }, [showScrollButton, scrollToBottom])
 
   // Set active conversation when conversations load
   useEffect(() => {
@@ -511,11 +573,11 @@ export default function Home() {
 
     if (!input.trim() && !selectedImage) return
 
-    console.log("Form submitted with input:", input)
+
 
     // Create conversation if none exists
     if (!activeConversation) {
-      console.log("No active conversation, creating new one")
+
       const newConversation = await createConversationMutation.mutateAsync("New Conversation")
       setActiveConversation(newConversation.id)
       // Wait a bit for the conversation to be set
@@ -607,87 +669,124 @@ export default function Home() {
     }
   }
 
-  console.log("Render - Server messages count:", messages.length)
-  console.log("Render - Local messages count:", localMessages.length)
-  console.log("Render - All messages count:", allMessages.length)
-  console.log("Render - Active conversation:", activeConversation)
-  console.log("Render - Show suggestions:", showSuggestions)
+  // Auto-resize textarea
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value)
+    const textarea = e.target
+    textarea.style.height = "auto"
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px"
+  }
+
+
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 mobile-safe">
+    <div className="app-container">
       {/* Header */}
-      <header className="mobile-header bg-black/20 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Avatar className="w-10 h-10">
-            <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-            <AvatarFallback>L</AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-white font-semibold text-lg">Luna</h1>
-            <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
+      <header className="app-header">
+        <div className="flex items-center gap-3">
+          <div className="avatar-wrapper">
+            <div className="avatar-inner">
+              <Avatar className="w-full h-full">
+                <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white font-semibold">
+                  L
+                </AvatarFallback>
+              </Avatar>
+            </div>
           </div>
-                  </div>
-          <Button
-            onClick={handleNewConversation}
-            variant="ghost"
-            size="sm"
-            className="text-white/80 hover:text-white hover:bg-white/10"
-          >
+          <div>
+            <h1 className="text-white font-semibold text-lg leading-tight">Luna</h1>
+            <p className="text-white/60 text-sm leading-tight">AI Assistant by Brajesh</p>
+          </div>
+        </div>
+        <Button
+          onClick={handleNewConversation}
+          variant="ghost"
+          size="sm"
+          className="text-white/80 hover:text-white hover:bg-white/10 transition-all duration-200"
+          disabled={createConversationMutation.isPending}
+        >
+          {createConversationMutation.isPending ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
             <PlusCircle className="w-4 h-4 mr-2" />
-            New Chat
-          </Button>
+          )}
+          New Chat
+        </Button>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col mobile-content">
-        {/* Messages */}
-        <div 
-          ref={chatContainerRef} 
-          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" 
-          style={{ paddingBottom: '60px' }}
-        >
+      {/* Chat Container */}
+      <div 
+        ref={chatContainerRef} 
+        className="chat-container scrollbar-modern"
+      >
           {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
-            <div className="flex flex-col items-center justify-center h-full space-y-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-                <Avatar className="w-20 h-20 mx-auto mb-4">
-                  <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                  <AvatarFallback>L</AvatarFallback>
-                </Avatar>
-                <h2 className="text-2xl font-semibold text-white mb-2">Welcome to Luna</h2>
-                <p className="text-white/60 mb-8">
+            <div className="welcome-container">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="text-center"
+              >
+                <div className="welcome-avatar">
+                  <Avatar className="w-full h-full">
+                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                    <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white font-bold text-2xl">
+                      L
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                <h2 className="text-3xl font-bold text-white mb-3">Welcome to Luna</h2>
+                <p className="text-white/70 text-lg max-w-md mx-auto mb-8">
                   Your intelligent AI assistant created by Brajesh. How can I help you today?
                 </p>
               </motion.div>
 
-              <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.2 }}
+              >
+                <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
+              </motion.div>
             </div>
           ) : (
-            <AnimatePresence>
-              {allMessages.map((message, index) => {
-                console.log("Rendering message:", message.id, message.role, message.content.substring(0, 50))
-                return (
+            <div className="messages-container">
+              <AnimatePresence mode="popLayout">
+                {allMessages.map((message, index) => (
                   <motion.div
                     key={message.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                    transition={{ 
+                      duration: 0.3,
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30
+                    }}
                     className={cn(
-                      "flex gap-4 message relative",
+                      "flex gap-4 items-start",
                       message.role === "user" ? "justify-end" : "justify-start",
                     )}
                   >
                     {message.role === "assistant" && (
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                        <AvatarFallback>L</AvatarFallback>
-                      </Avatar>
+                      <div className="avatar-wrapper flex-shrink-0">
+                        <div className="avatar-inner">
+                          <Avatar className="w-full h-full">
+                            <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                            <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white font-semibold">
+                              L
+                            </AvatarFallback>
+                          </Avatar>
+                        </div>
+                      </div>
                     )}
 
                     <div
                       className={cn(
-                        "message-container glass-morphism p-4 rounded-2xl",
-                        message.role === "user" ? "user-message text-white" : "assistant-message text-white",
+                        "message-bubble selectable",
+                        message.role === "user" ? "user-message" : "assistant-message"
                       )}
                     >
                       {message.role === "user" && message.imageData && (
@@ -719,177 +818,204 @@ export default function Home() {
                     </div>
 
                     {message.role === "user" && (
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarImage src="/images/user-avatar.jpg" alt="User" />
-                        <AvatarFallback>U</AvatarFallback>
-                      </Avatar>
-                    )}
-                  </motion.div>
-                )
-              })}
-              
-              {/* Streaming message */}
-              {streamingMessageId && (streamingMessage || isCreatingImages) && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-4 justify-start"
-                >
-                  <Avatar className="w-8 h-8 flex-shrink-0">
-                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                    <AvatarFallback>L</AvatarFallback>
-                  </Avatar>
-                  <div className="glass-morphism rounded-2xl bg-black/20 text-white">
-                    {isCreatingImages ? (
-                      <ImageGenerationAnimation isVisible={isCreatingImages} />
-                    ) : (
-                      <div className="p-4">
-                        <div className="markdown-content">
-                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
+                      <div className="avatar-wrapper flex-shrink-0">
+                        <div className="avatar-inner">
+                          <Avatar className="w-full h-full">
+                            <AvatarImage src="/images/user-avatar.jpg" alt="User" />
+                            <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white font-semibold">
+                              U
+                            </AvatarFallback>
+                          </Avatar>
                         </div>
                       </div>
                     )}
+                  </motion.div>
+                ))}
+              
+                {/* Streaming message */}
+                {streamingMessageId && (streamingMessage || isCreatingImages) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ 
+                      duration: 0.3,
+                      type: "spring",
+                      stiffness: 500,
+                      damping: 30
+                    }}
+                    className="flex gap-4 items-start justify-start"
+                  >
+                    <div className="avatar-wrapper flex-shrink-0">
+                      <div className="avatar-inner">
+                        <Avatar className="w-full h-full">
+                          <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                          <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white font-semibold">
+                            L
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
+                    </div>
+                    <div className="message-bubble assistant-message">
+                      {isCreatingImages ? (
+                        <ImageGenerationAnimation isVisible={isCreatingImages} />
+                      ) : (
+                        <div className="markdown-content">
+                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+          )}
+
+              {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex gap-4 items-start justify-start"
+                >
+                  <div className="avatar-wrapper flex-shrink-0">
+                    <div className="avatar-inner">
+                      <Avatar className="w-full h-full">
+                        <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                        <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white font-semibold">
+                          L
+                        </AvatarFallback>
+                      </Avatar>
+                    </div>
+                  </div>
+                  <div className="message-bubble assistant-message">
+                    <div className="typing-indicator">
+                      <div className="typing-dots">
+                        <div className="typing-dot"></div>
+                        <div className="typing-dot"></div>
+                        <div className="typing-dot"></div>
+                      </div>
+                      <span className="text-white/80 ml-3">Luna is thinking...</span>
+                    </div>
                   </div>
                 </motion.div>
               )}
-            </AnimatePresence>
-          )}
-
-          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 justify-start"
-            >
-              <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                <AvatarFallback>L</AvatarFallback>
-              </Avatar>
-              <div className="glass-morphism p-4 rounded-2xl bg-black/20">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  <span className="text-white/80">Luna is thinking...</span>
-                </div>
-              </div>
-            </motion.div>
+            </div>
           )}
 
           <div ref={messagesEndRef} />
-        </div>
+      </div>
 
-        {/* Scroll to Bottom Button */}
-        {isUserScrolledUp && (
-          <div className="fixed bottom-24 right-4 z-40">
-            <Button
-              onClick={() => {
-                setIsUserScrolledUp(false)
-                scrollToBottom(true)
-              }}
-              variant="default"
-              size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg"
+      {/* Scroll to Bottom Button */}
+      <AnimatePresence>
+        {showScrollButton && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={() => scrollToBottom()}
+            className="scroll-to-bottom"
+          >
+            <ArrowDown className="w-5 h-5" />
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {/* Input Area */}
+      <div className="app-input">
+        {imagePreview && (
+          <div className="image-preview mb-3">
+            <img
+              src={imagePreview}
+              alt="Upload preview"
+              className="w-20 h-20 object-cover rounded-lg border-2 border-purple-400/50"
+            />
+            <button
+              className="remove-image"
+              onClick={removeImage}
             >
-              <ArrowDown className="w-4 h-4" />
-            </Button>
+              <X className="w-3 h-3" />
+            </button>
           </div>
         )}
 
-        {/* Input Area */}
-        <div className="mobile-input bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
-          {imagePreview && (
-            <div className="mb-4 relative inline-block">
-              <img
-                src={imagePreview || "/placeholder.svg"}
-                alt="Upload preview"
-                className="w-16 h-16 object-cover rounded-lg border-2 border-purple-400/50"
-              />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600"
-                onClick={removeImage}
-              >
-                <X className="w-3 h-3 text-white" />
-              </Button>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  // Auto-resize textarea
-                  const textarea = e.target as HTMLTextAreaElement
-                  textarea.style.height = "auto"
-                  textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px"
-                }}
-                placeholder="Type your message..."
-                className="w-full min-h-[48px] max-h-32 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/50 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSubmit(e)
+        <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+          <div className="flex-1 relative">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInputChange}
+              placeholder="Type your message..."
+              className="chat-input"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault()
+                  handleSubmit(e)
+                }
+              }}
+              onFocus={() => {
+                // NO AUTO SCROLL - let keyboard positioning handle visibility naturally
+              }}
+              onBlur={() => {
+                // Reset positions when input loses focus
+                setTimeout(() => {
+                  const inputElement = document.querySelector('.app-input') as HTMLElement
+                  const chatContainer = chatContainerRef.current
+                  if (inputElement && chatContainer) {
+                    inputElement.style.bottom = '0px'
+                    chatContainer.style.bottom = 'var(--input-height)'
                   }
-                }}
-                onFocus={() => {
-                  // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
-                  if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 300)
-                  }
-                }}
-                onBlur={() => {
-                  // Small delay to handle keyboard closing only if user is at bottom
-                  if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 100)
-                  }
-                }}
-                rows={1}
-                style={{
-                  scrollbarWidth: "none",
-                  msOverflowStyle: "none",
-                  minHeight: "48px",
-                  lineHeight: "1.5",
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-2 text-white/60 hover:text-white hover:bg-white/10"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <ImageIcon className="w-4 h-4" />
-              </Button>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-            </div>
-
+                }, 300)
+              }}
+              rows={1}
+              disabled={isLoading || sendStreamingMessageMutation.isPending}
+            />
             <Button
-              type="submit"
-              disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="absolute right-3 bottom-3 text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading || sendStreamingMessageMutation.isPending}
             >
-              {isLoading || sendStreamingMessageMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
+              <ImageIcon className="w-4 h-4" />
             </Button>
-          </form>
-        </div>
+            <input 
+              ref={fileInputRef} 
+              type="file" 
+              accept="image/*" 
+              onChange={handleImageUpload} 
+              className="hidden" 
+            />
+          </div>
+
+          <Button
+            type="submit"
+            disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
+            className="send-button"
+          >
+            {isLoading || sendStreamingMessageMutation.isPending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </Button>
+        </form>
       </div>
       
       {/* API Status Monitor */}
       <ApiStatus />
       
       {/* Toast Notifications */}
-      <Toaster />
+      <Toaster 
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: 'rgba(0, 0, 0, 0.8)',
+            color: 'white',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+          },
+        }}
+      />
     </div>
   )
 }
