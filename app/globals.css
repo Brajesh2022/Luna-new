@@ -228,8 +228,8 @@ input, textarea, select {
   flex-shrink: 0;
   /* Enhanced mobile keyboard handling */
   transform: translateY(0);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  /* Ensure it stays above keyboard */
+  transition: transform 0.25s ease-out;
+  /* Ensure it stays attached to keyboard */
   will-change: transform;
 }
 
@@ -244,12 +244,12 @@ input, textarea, select {
   }
 }
 
-/* Enhanced mobile input positioning */
+/* Enhanced mobile input positioning - keyboard attached */
 @media screen and (max-height: 600px) {
   .app-input {
     position: fixed;
     bottom: 0;
-    transform: translateY(calc(-1 * var(--keyboard-height, 0px)));
+    /* Let JavaScript handle the transform for precise keyboard attachment */
   }
 }
 

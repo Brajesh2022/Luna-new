@@ -160,15 +160,20 @@ export default function Home() {
         const keyboardHeight = Math.max(0, window.innerHeight - window.visualViewport.height)
         document.documentElement.style.setProperty("--keyboard-height", `${keyboardHeight}px`)
         
-        // Position input bar above keyboard
+        // Position input bar directly attached to keyboard
         const inputElement = document.querySelector('.app-input') as HTMLElement
         if (inputElement) {
           if (keyboardHeight > 0) {
-            // Keyboard is open - move input above it
-            inputElement.style.transform = `translateY(-${keyboardHeight}px)`
+            // Keyboard is open - attach input directly to keyboard edge
+            // Use minimal offset only if needed for visual clarity
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            const offset = isIOS ? Math.max(0, keyboardHeight - 5) : Math.max(0, keyboardHeight - 8)
+            inputElement.style.transform = `translateY(-${offset}px)`
+            inputElement.style.transition = 'transform 0.25s ease-out'
           } else {
             // Keyboard is closed - reset position
             inputElement.style.transform = 'translateY(0)'
+            inputElement.style.transition = 'transform 0.25s ease-out'
           }
         }
         
@@ -196,9 +201,15 @@ export default function Home() {
         
         const inputElement = document.querySelector('.app-input') as HTMLElement
         if (inputElement && keyboardHeight > 0) {
-          inputElement.style.transform = `translateY(-${Math.min(keyboardHeight, 300)}px)`
+          // Attach to keyboard edge with minimal offset
+          const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+          const maxHeight = Math.min(keyboardHeight, 300)
+          const offset = isIOS ? Math.max(0, maxHeight - 5) : Math.max(0, maxHeight - 8)
+          inputElement.style.transform = `translateY(-${offset}px)`
+          inputElement.style.transition = 'transform 0.25s ease-out'
         } else if (inputElement) {
           inputElement.style.transform = 'translateY(0)'
+          inputElement.style.transition = 'transform 0.25s ease-out'
         }
       }
 
