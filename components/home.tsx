@@ -1,13 +1,12 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown } from "lucide-react"
+import { Loader2, Send, ImageIcon, PlusCircle, Copy, X, Check, ArrowDown, Sparkles } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { motion, AnimatePresence } from "framer-motion"
+import { motion, AnimatePresence, useScroll, useTransform } from "framer-motion"
 import { TopicSuggestion } from "@/components/topic-suggestion"
 import ReactMarkdown from "react-markdown"
 import { CodeBlock } from "@/components/code-block"
@@ -47,13 +46,14 @@ export default function Home() {
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
   const [isCreatingImages, setIsCreatingImages] = useState(false)
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false)
+  const [isInputFocused, setIsInputFocused] = useState(false)
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   const queryClient = useQueryClient()
 
@@ -77,77 +77,36 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Simplified scroll handling
+  // Enhanced scroll handling
   const updateScrollPosition = useCallback(() => {
-    if (!chatContainerRef.current) return
+    if (!scrollContainerRef.current) return
     
-    const container = chatContainerRef.current
-    const position = getScrollPosition(container)
+    const container = scrollContainerRef.current
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50
     
-    setIsUserScrolledUp(!position.isAtBottom)
+    setIsUserScrolledUp(!isAtBottom)
   }, [])
 
-  // Simple scroll handler without throttling
   const handleScroll = useCallback(() => {
     updateScrollPosition()
   }, [updateScrollPosition])
 
-  // Simple scroll to bottom function
   const scrollToBottom = useCallback((force: boolean = false) => {
-    if (!messagesEndRef.current) return
+    if (!messagesEndRef.current || (!force && isUserScrolledUp)) return
     
-    const shouldScroll = force || !isUserScrolledUp
-    
-    if (shouldScroll) {
-      // Use native smooth scrolling instead of custom animation
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: "smooth", 
-        block: "end",
-        inline: "nearest"
-      })
-      
-      // Update position after a short delay
-      setTimeout(() => {
-        updateScrollPosition()
-      }, 100)
-    }
-  }, [isUserScrolledUp, updateScrollPosition])
+    messagesEndRef.current.scrollIntoView({ 
+      behavior: force ? "instant" : "smooth",
+      block: "end"
+    })
+  }, [isUserScrolledUp])
 
-  // Auto-scroll to bottom when messages change (only if user is at bottom)
+  // Auto-scroll effect
   useEffect(() => {
-    if (scrollTimeoutRef.current) {
-      clearTimeout(scrollTimeoutRef.current)
-    }
-    
-    scrollTimeoutRef.current = setTimeout(() => {
-      // Only auto-scroll if user is at bottom to prevent interrupting reading
-      if (!isUserScrolledUp) {
-        scrollToBottom()
-      }
-    }, 200)
-    
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current)
-      }
-    }
-  }, [allMessages, scrollToBottom, isUserScrolledUp])
-
-  // Auto-scroll to bottom for loading states (less aggressive)
-  useEffect(() => {
-    if ((isLoading || streamingMessage) && !isUserScrolledUp) {
+    if (streamingMessage || isCreatingImages) {
       scrollToBottom()
     }
-  }, [isLoading, streamingMessage, scrollToBottom, isUserScrolledUp])
-
-  // Add scroll event listener
-  useEffect(() => {
-    const container = chatContainerRef.current
-    if (container) {
-      container.addEventListener('scroll', handleScroll)
-      return () => container.removeEventListener('scroll', handleScroll)
-    }
-  }, [])
+  }, [streamingMessage, isCreatingImages, scrollToBottom])
 
   // Focus input on load
   useEffect(() => {
@@ -485,10 +444,11 @@ export default function Home() {
   const copyMessage = (content: string, id: number) => {
     navigator.clipboard.writeText(content)
     setCopiedMessageId(id)
+    toast.success("Message copied to clipboard")
     setTimeout(() => setCopiedMessageId(null), 2000)
   }
 
-  // Custom renderer for code blocks
+  // Enhanced renderers for markdown
   const renderers = {
     code({ node, inline, className, children, ...props }: any) {
       const match = /language-(\w+)/.exec(className || "")
@@ -499,7 +459,7 @@ export default function Home() {
       }
 
       return (
-        <code className={className} {...props}>
+        <code className={cn("bg-white/10 px-2 py-1 rounded text-purple-200", className)} {...props}>
           {children}
         </code>
       )
@@ -614,172 +574,386 @@ export default function Home() {
   console.log("Render - Show suggestions:", showSuggestions)
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 mobile-safe">
-      {/* Header */}
-      <header className="mobile-header bg-black/20 backdrop-blur-xl border-b border-white/10 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <Avatar className="w-10 h-10">
-            <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-            <AvatarFallback>L</AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-white font-semibold text-lg">Luna</h1>
-            <p className="text-white/60 text-xs">AI Assistant by Brajesh</p>
-          </div>
-                  </div>
-          <Button
-            onClick={handleNewConversation}
-            variant="ghost"
-            size="sm"
-            className="text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <PlusCircle className="w-4 h-4 mr-2" />
-            New Chat
-          </Button>
-      </header>
+    <div className="h-screen flex flex-col relative overflow-hidden">
+      {/* Animated Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-violet-900 via-purple-900 to-indigo-900">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(120,119,198,0.3),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(120,119,198,0.4),rgba(255,255,255,0))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(120,119,198,0.4),rgba(255,255,255,0))]" />
+        
+        {/* Floating Particles */}
+        {typeof window !== 'undefined' && [...Array(15)].map((_, i) => (
+          <motion.div
+            key={i}
+            className="absolute w-1 h-1 bg-white/20 rounded-full"
+            initial={{
+              x: Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000),
+              y: Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 800),
+            }}
+            animate={{
+              y: [null, Math.random() * (typeof window !== 'undefined' ? window.innerHeight : 800)],
+              x: [null, Math.random() * (typeof window !== 'undefined' ? window.innerWidth : 1000)],
+            }}
+            transition={{
+              duration: Math.random() * 20 + 10,
+              repeat: Infinity,
+              repeatType: "reverse",
+              ease: "linear",
+            }}
+          />
+        ))}
+      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col mobile-content">
-        {/* Messages */}
-        <div 
-          ref={chatContainerRef} 
-          className="flex-1 overflow-y-auto px-4 py-6 space-y-6 scrollbar-thin" 
-          style={{ paddingBottom: '60px' }}
-        >
-          {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
-            <div className="flex flex-col items-center justify-center h-full space-y-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
-                <Avatar className="w-20 h-20 mx-auto mb-4">
-                  <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                  <AvatarFallback>L</AvatarFallback>
-                </Avatar>
-                <h2 className="text-2xl font-semibold text-white mb-2">Welcome to Luna</h2>
-                <p className="text-white/60 mb-8">
-                  Your intelligent AI assistant created by Brajesh. How can I help you today?
-                </p>
-              </motion.div>
-
-              <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
-            </div>
-          ) : (
-            <AnimatePresence>
-              {allMessages.map((message, index) => {
-                console.log("Rendering message:", message.id, message.role, message.content.substring(0, 50))
-                return (
-                  <motion.div
-                    key={message.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className={cn(
-                      "flex gap-4 message relative",
-                      message.role === "user" ? "justify-end" : "justify-start",
-                    )}
-                  >
-                    {message.role === "assistant" && (
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                        <AvatarFallback>L</AvatarFallback>
-                      </Avatar>
-                    )}
-
-                    <div
-                      className={cn(
-                        "message-container glass-morphism p-4 rounded-2xl",
-                        message.role === "user" ? "user-message text-white" : "assistant-message text-white",
-                      )}
-                    >
-                      {message.role === "user" && message.imageData && (
-                        <div className="mb-3">
-                          <img
-                            src={`data:${message.imageMimeType};base64,${message.imageData}`}
-                            alt="Uploaded image"
-                            className="max-w-xs max-h-48 object-contain rounded-lg border-2 border-white/20"
-                          />
-                        </div>
-                      )}
-                      
-                      {message.role === "assistant" && isImageGenerationContent(message.content) ? (
-                        <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
-                      ) : (
-                        <div className="markdown-content">
-                          <ReactMarkdown components={renderers}>{message.content}</ReactMarkdown>
-                        </div>
-                      )}
-
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="message-copy-button"
-                        onClick={() => copyMessage(message.content, message.id)}
-                      >
-                        {copiedMessageId === message.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                      </Button>
-                    </div>
-
-                    {message.role === "user" && (
-                      <Avatar className="w-8 h-8 flex-shrink-0">
-                        <AvatarImage src="/images/user-avatar.jpg" alt="User" />
-                        <AvatarFallback>U</AvatarFallback>
-                      </Avatar>
-                    )}
-                  </motion.div>
-                )
-              })}
-              
-              {/* Streaming message */}
-              {streamingMessageId && (streamingMessage || isCreatingImages) && (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-4 justify-start"
-                >
-                  <Avatar className="w-8 h-8 flex-shrink-0">
-                    <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                    <AvatarFallback>L</AvatarFallback>
-                  </Avatar>
-                  <div className="glass-morphism rounded-2xl bg-black/20 text-white">
-                    {isCreatingImages ? (
-                      <ImageGenerationAnimation isVisible={isCreatingImages} />
-                    ) : (
-                      <div className="p-4">
-                        <div className="markdown-content">
-                          <ReactMarkdown components={renderers}>{streamingMessage + " ▊"}</ReactMarkdown>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
-
-          {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex gap-4 justify-start"
+      {/* Enhanced Header */}
+      <motion.header 
+        className="relative z-50 backdrop-blur-xl bg-black/10 border-b border-white/10"
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6 }}
+      >
+        <div className="px-6 py-4">
+          <div className="flex items-center justify-between">
+            <motion.div 
+              className="flex items-center space-x-4"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
             >
-              <Avatar className="w-8 h-8 flex-shrink-0">
-                <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
-                <AvatarFallback>L</AvatarFallback>
-              </Avatar>
-              <div className="glass-morphism p-4 rounded-2xl bg-black/20">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-purple-400" />
-                  <span className="text-white/80">Luna is thinking...</span>
-                </div>
+              <div className="relative">
+                <Avatar className="w-12 h-12 ring-2 ring-purple-400/50">
+                  <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                  <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">L</AvatarFallback>
+                </Avatar>
+                <motion.div
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+              </div>
+              <div>
+                <motion.h1 
+                  className="text-white font-bold text-xl bg-gradient-to-r from-white to-purple-200 bg-clip-text text-transparent"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.1 }}
+                >
+                  Luna AI
+                </motion.h1>
+                <motion.p 
+                  className="text-white/60 text-sm flex items-center gap-1"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.2 }}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  AI Assistant by Brajesh
+                </motion.p>
               </div>
             </motion.div>
+            
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+            >
+              <Button
+                onClick={handleNewConversation}
+                variant="ghost"
+                size="sm"
+                className="text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 hover:scale-105"
+              >
+                <PlusCircle className="w-4 h-4 mr-2" />
+                New Chat
+              </Button>
+            </motion.div>
+          </div>
+        </div>
+      </motion.header>
+
+      {/* Main Content Area */}
+      <div className="flex-1 relative overflow-hidden">
+        <div 
+          ref={scrollContainerRef}
+          className="h-full overflow-y-auto"
+          onScroll={handleScroll}
+          style={{
+            scrollBehavior: 'smooth',
+            WebkitOverflowScrolling: 'touch'
+          }}
+        >
+          <div className="px-6 py-6 pb-32 min-h-full">
+                      {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
+              // Welcome Screen
+              <motion.div 
+                className="flex flex-col items-center justify-center min-h-[60vh] space-y-8"
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8 }}
+              >
+                <motion.div 
+                  className="text-center"
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.8, delay: 0.2 }}
+                >
+                  <div className="relative mb-6">
+                    <Avatar className="w-24 h-24 mx-auto ring-4 ring-purple-400/30">
+                      <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-2xl">L</AvatarFallback>
+                    </Avatar>
+                    <motion.div
+                      className="absolute -top-2 -right-2 w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 10, repeat: Infinity, ease: "linear" }}
+                    >
+                      <Sparkles className="w-4 h-4 text-white" />
+                    </motion.div>
+                  </div>
+                  
+                  <motion.h2 
+                    className="text-4xl font-bold text-white mb-4 bg-gradient-to-r from-white via-purple-200 to-pink-200 bg-clip-text text-transparent"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, delay: 0.4 }}
+                  >
+                    Welcome to Luna
+                  </motion.h2>
+                  
+                  <motion.p 
+                    className="text-white/70 text-lg max-w-md mx-auto leading-relaxed"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.8, delay: 0.6 }}
+                  >
+                    Your intelligent AI assistant is ready to help with anything you need. 
+                    Start a conversation below!
+                  </motion.p>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 30 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.8, delay: 0.8 }}
+                  className="w-full max-w-4xl"
+                >
+                  <TopicSuggestion examples={TOPIC_SUGGESTIONS} onSelect={handleTopicSelect} />
+                </motion.div>
+              </motion.div>
+                         ) : (
+              // Messages Area
+              <div className="space-y-6">
+                <AnimatePresence mode="popLayout">
+                  {allMessages.map((message, index) => (
+                    <motion.div
+                      key={message.id}
+                      layout
+                      initial={{ opacity: 0, y: 50, scale: 0.8 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -50, scale: 0.8 }}
+                      transition={{ 
+                        duration: 0.5,
+                        type: "spring",
+                        stiffness: 100,
+                        damping: 15
+                      }}
+                      className={cn(
+                        "flex gap-4 group",
+                        message.role === "user" ? "justify-end" : "justify-start",
+                      )}
+                    >
+                                         {message.role === "assistant" && (
+                       <motion.div
+                         initial={{ scale: 0 }}
+                         animate={{ scale: 1 }}
+                         transition={{ duration: 0.3, delay: 0.1 }}
+                       >
+                         <Avatar className="w-10 h-10 flex-shrink-0 ring-2 ring-purple-400/30">
+                           <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                           <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">L</AvatarFallback>
+                         </Avatar>
+                       </motion.div>
+                     )}
+
+                     <div className="flex flex-col max-w-[85%] md:max-w-[75%]">
+                       <motion.div
+                         className={cn(
+                           "relative backdrop-blur-xl border transition-all duration-300 group-hover:scale-[1.02]",
+                           message.role === "user" 
+                             ? "bg-gradient-to-r from-purple-600/80 to-pink-600/80 border-purple-400/30 text-white rounded-3xl rounded-tr-lg" 
+                             : "bg-black/20 border-white/10 text-white rounded-3xl rounded-tl-lg",
+                         )}
+                         whileHover={{ y: -2 }}
+                         transition={{ duration: 0.2 }}
+                       >
+                         <div className="p-5">
+                                                 {message.role === "user" && message.imageData && (
+                             <motion.div 
+                               className="mb-4"
+                               initial={{ opacity: 0, scale: 0.8 }}
+                               animate={{ opacity: 1, scale: 1 }}
+                               transition={{ duration: 0.3 }}
+                             >
+                               <img
+                                 src={`data:${message.imageMimeType};base64,${message.imageData}`}
+                                 alt="Uploaded image"
+                                 className="max-w-xs max-h-48 object-contain rounded-2xl border-2 border-white/20 shadow-lg"
+                               />
+                             </motion.div>
+                           )}
+                           
+                           {message.role === "assistant" && isImageGenerationContent(message.content) ? (
+                             <ImageCollage prompts={getImagePrompts(message.content)} messageId={message.id} />
+                           ) : (
+                             <div className="markdown-content prose prose-invert max-w-none">
+                               <ReactMarkdown components={renderers}>
+                                 {message.content}
+                               </ReactMarkdown>
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Copy Button */}
+                         <motion.div
+                           className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                           whileHover={{ scale: 1.1 }}
+                           whileTap={{ scale: 0.9 }}
+                         >
+                           <Button
+                             variant="ghost"
+                             size="sm"
+                             className="h-8 w-8 p-0 bg-black/20 hover:bg-black/40 border border-white/20"
+                             onClick={() => copyMessage(message.content, message.id)}
+                           >
+                             {copiedMessageId === message.id ? 
+                               <Check className="w-3 h-3 text-green-400" /> : 
+                               <Copy className="w-3 h-3 text-white/60" />
+                             }
+                           </Button>
+                         </motion.div>
+                       </motion.div>
+
+                       {/* Message timestamp */}
+                       <motion.div
+                         className={cn(
+                           "text-xs text-white/40 mt-2 px-2",
+                           message.role === "user" ? "text-right" : "text-left"
+                         )}
+                         initial={{ opacity: 0 }}
+                         animate={{ opacity: 1 }}
+                         transition={{ duration: 0.3, delay: 0.2 }}
+                       >
+                         {new Date(message.createdAt).toLocaleTimeString([], { 
+                           hour: '2-digit', 
+                           minute: '2-digit' 
+                         })}
+                       </motion.div>
+                     </div>
+
+                                         {message.role === "user" && (
+                       <motion.div
+                         initial={{ scale: 0 }}
+                         animate={{ scale: 1 }}
+                         transition={{ duration: 0.3, delay: 0.1 }}
+                       >
+                         <Avatar className="w-10 h-10 flex-shrink-0 ring-2 ring-pink-400/30">
+                           <AvatarImage src="/images/user-avatar.jpg" alt="User" />
+                           <AvatarFallback className="bg-gradient-to-br from-pink-500 to-purple-500 text-white">U</AvatarFallback>
+                         </Avatar>
+                       </motion.div>
+                     )}
+                   </motion.div>
+                 ))}
+                </AnimatePresence>
+                
+                {/* Streaming Message */}
+                {streamingMessageId && (streamingMessage || isCreatingImages) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 50, scale: 0.8 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -50, scale: 0.8 }}
+                    className="flex gap-4 justify-start"
+                  >
+                    <Avatar className="w-10 h-10 flex-shrink-0 ring-2 ring-purple-400/30">
+                      <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">L</AvatarFallback>
+                    </Avatar>
+                    <div className="backdrop-blur-xl bg-black/20 border border-white/10 text-white rounded-3xl rounded-tl-lg max-w-[85%] md:max-w-[75%]">
+                      {isCreatingImages ? (
+                        <ImageGenerationAnimation isVisible={isCreatingImages} />
+                      ) : (
+                        <div className="p-5">
+                          <div className="markdown-content prose prose-invert max-w-none">
+                            <ReactMarkdown components={renderers}>
+                              {streamingMessage}
+                            </ReactMarkdown>
+                            <motion.span
+                              className="inline-block w-2 h-5 bg-purple-400 ml-1"
+                              animate={{ opacity: [1, 0] }}
+                              transition={{ duration: 0.8, repeat: Infinity }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
           )}
 
-          <div ref={messagesEndRef} />
+                          {/* Loading State */}
+                {(isLoading || sendStreamingMessageMutation.isPending) && !streamingMessage && !isCreatingImages && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-4 justify-start"
+                  >
+                    <Avatar className="w-10 h-10 flex-shrink-0 ring-2 ring-purple-400/30">
+                      <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
+                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white">L</AvatarFallback>
+                    </Avatar>
+                    <div className="backdrop-blur-xl bg-black/20 border border-white/10 rounded-3xl rounded-tl-lg p-5">
+                      <div className="flex items-center gap-3">
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                        >
+                          <Loader2 className="w-5 h-5 text-purple-400" />
+                        </motion.div>
+                        <span className="text-white/80">Luna is thinking...</span>
+                        <motion.div className="flex gap-1">
+                          {[0, 1, 2].map((i) => (
+                            <motion.div
+                              key={i}
+                              className="w-1 h-1 bg-purple-400 rounded-full"
+                              animate={{ y: [0, -8, 0] }}
+                              transition={{
+                                duration: 0.6,
+                                repeat: Infinity,
+                                delay: i * 0.2,
+                              }}
+                            />
+                          ))}
+                        </motion.div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            )}
+            
+            <div ref={messagesEndRef} />
+          </div>
         </div>
+      </div>
 
-        {/* Scroll to Bottom Button */}
+      {/* Scroll to Bottom Button */}
+      <AnimatePresence>
         {isUserScrolledUp && (
-          <div className="fixed bottom-24 right-4 z-40">
+          <motion.div
+            initial={{ opacity: 0, scale: 0, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0, y: 20 }}
+            className="fixed bottom-28 right-6 z-40"
+          >
             <Button
               onClick={() => {
                 setIsUserScrolledUp(false)
@@ -787,102 +961,120 @@ export default function Home() {
               }}
               variant="default"
               size="sm"
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-full p-3 shadow-lg"
+              className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-full p-3 shadow-xl backdrop-blur-xl border border-white/20 hover:scale-110 transition-all duration-300"
             >
-              <ArrowDown className="w-4 h-4" />
+              <ArrowDown className="w-5 h-5" />
             </Button>
-          </div>
+          </motion.div>
         )}
+      </AnimatePresence>
 
-        {/* Input Area */}
-        <div className="mobile-input bg-black/20 backdrop-blur-xl border-t border-white/10 p-4">
+              {/* Enhanced Input Area */}
+      <motion.div 
+        className="fixed bottom-0 left-0 right-0 z-50 backdrop-blur-2xl bg-black/10 border-t border-white/10"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.6, delay: 0.3 }}
+      >
+        <div className="px-6 py-4">
           {imagePreview && (
-            <div className="mb-4 relative inline-block">
+            <motion.div 
+              className="mb-4 relative inline-block"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+            >
               <img
-                src={imagePreview || "/placeholder.svg"}
+                src={imagePreview}
                 alt="Upload preview"
-                className="w-16 h-16 object-cover rounded-lg border-2 border-purple-400/50"
+                className="w-20 h-20 object-cover rounded-2xl border-2 border-purple-400/50 shadow-lg"
               />
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-red-500 hover:bg-red-600"
+              <motion.button
+                className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center shadow-lg"
                 onClick={removeImage}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
               >
-                <X className="w-3 h-3 text-white" />
-              </Button>
-            </div>
+                <X className="w-4 h-4 text-white" />
+              </motion.button>
+            </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex gap-2">
+          <form onSubmit={handleSubmit} className="flex gap-3 items-end">
             <div className="flex-1 relative">
-              <textarea
-                ref={inputRef}
-                value={input}
-                onChange={(e) => {
-                  setInput(e.target.value)
-                  // Auto-resize textarea
-                  const textarea = e.target as HTMLTextAreaElement
-                  textarea.style.height = "auto"
-                  textarea.style.height = Math.min(textarea.scrollHeight, 128) + "px"
+              <motion.div
+                className="relative"
+                animate={{ 
+                  scale: isInputFocused ? 1.02 : 1,
                 }}
-                placeholder="Type your message..."
-                className="w-full min-h-[48px] max-h-32 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/50 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSubmit(e)
-                  }
-                }}
-                onFocus={() => {
-                  // Auto-scroll when input is focused (keyboard appears) only if user is at bottom
-                  if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 300)
-                  }
-                }}
-                onBlur={() => {
-                  // Small delay to handle keyboard closing only if user is at bottom
-                  if (!isUserScrolledUp) {
-                    setTimeout(() => {
-                      scrollToBottom()
-                    }, 100)
-                  }
-                }}
-                rows={1}
-                style={{
-                  scrollbarWidth: "none",
-                  msOverflowStyle: "none",
-                  minHeight: "48px",
-                  lineHeight: "1.5",
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-2 top-2 text-white/60 hover:text-white hover:bg-white/10"
-                onClick={() => fileInputRef.current?.click()}
+                transition={{ duration: 0.2 }}
               >
-                <ImageIcon className="w-4 h-4" />
-              </Button>
-              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value)
+                    const textarea = e.target as HTMLTextAreaElement
+                    textarea.style.height = "auto"
+                    textarea.style.height = Math.min(textarea.scrollHeight, 120) + "px"
+                  }}
+                  placeholder="Type your message..."
+                  className="w-full min-h-[56px] max-h-[120px] bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-5 py-4 pr-14 text-white placeholder-white/40 resize-none focus:outline-none focus:ring-2 focus:ring-purple-400/50 focus:border-purple-400/50 transition-all duration-300"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSubmit(e)
+                    }
+                  }}
+                  onFocus={() => setIsInputFocused(true)}
+                  onBlur={() => setIsInputFocused(false)}
+                  rows={1}
+                />
+                
+                <motion.button
+                  type="button"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-white/50 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200"
+                  onClick={() => fileInputRef.current?.click()}
+                  whileHover={{ scale: 1.1 }}
+                  whileTap={{ scale: 0.9 }}
+                >
+                  <ImageIcon className="w-5 h-5" />
+                </motion.button>
+                
+                <input 
+                  ref={fileInputRef} 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleImageUpload} 
+                  className="hidden" 
+                />
+              </motion.div>
             </div>
 
-            <Button
-              type="submit"
-              disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
-              className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl px-6 py-3 h-12 disabled:opacity-50 disabled:cursor-not-allowed"
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
             >
-              {isLoading || sendStreamingMessageMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </Button>
+              <Button
+                type="submit"
+                disabled={isLoading || sendStreamingMessageMutation.isPending || (!input.trim() && !selectedImage)}
+                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-2xl px-6 py-4 h-14 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg backdrop-blur-xl border border-purple-400/20 transition-all duration-300"
+              >
+                {isLoading || sendStreamingMessageMutation.isPending ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Loader2 className="w-5 h-5" />
+                  </motion.div>
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </Button>
+            </motion.div>
           </form>
         </div>
+      </motion.div>
       </div>
       
       {/* API Status Monitor */}
