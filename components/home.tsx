@@ -77,36 +77,37 @@ export default function Home() {
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   )
 
-  // Simplified scroll handling
+  // Document scroll handling
   const updateScrollPosition = useCallback(() => {
-    if (!chatContainerRef.current) return
+    const scrollTop = window.pageYOffset || document.documentElement.scrollTop
+    const scrollHeight = document.documentElement.scrollHeight
+    const clientHeight = window.innerHeight
+    const scrolledToBottom = scrollTop + clientHeight >= scrollHeight - 100
     
-    const container = chatContainerRef.current
-    const position = getScrollPosition(container)
-    
-    setIsUserScrolledUp(!position.isAtBottom)
+    setIsUserScrolledUp(!scrolledToBottom)
   }, [])
 
-  // Simple scroll handler without throttling
+  // Optimized scroll handler with RAF
   const handleScroll = useCallback(() => {
-    updateScrollPosition()
+    if (scrollTimeoutRef.current) {
+      cancelAnimationFrame(scrollTimeoutRef.current)
+    }
+    
+    scrollTimeoutRef.current = requestAnimationFrame(() => {
+      updateScrollPosition()
+    })
   }, [updateScrollPosition])
 
-  // Simple scroll to bottom function
+  // Smooth scroll to bottom function
   const scrollToBottom = useCallback((force: boolean = false) => {
-    if (!messagesEndRef.current) return
-    
     const shouldScroll = force || !isUserScrolledUp
     
     if (shouldScroll) {
-      // Use native smooth scrolling instead of custom animation
-      messagesEndRef.current.scrollIntoView({ 
-        behavior: "smooth", 
-        block: "end",
-        inline: "nearest"
+      window.scrollTo({ 
+        top: document.documentElement.scrollHeight, 
+        behavior: "smooth" 
       })
       
-      // Update position after a short delay
       setTimeout(() => {
         updateScrollPosition()
       }, 100)
@@ -124,7 +125,7 @@ export default function Home() {
       if (!isUserScrolledUp) {
         scrollToBottom()
       }
-    }, 200)
+    }, 100)
     
     return () => {
       if (scrollTimeoutRef.current) {
@@ -140,14 +141,11 @@ export default function Home() {
     }
   }, [isLoading, streamingMessage, scrollToBottom, isUserScrolledUp])
 
-  // Add scroll event listener
+  // Add scroll event listener for window
   useEffect(() => {
-    const container = chatContainerRef.current
-    if (container) {
-      container.addEventListener('scroll', handleScroll)
-      return () => container.removeEventListener('scroll', handleScroll)
-    }
-  }, [])
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [handleScroll])
 
   // Focus input on load
   useEffect(() => {
@@ -614,9 +612,9 @@ export default function Home() {
   console.log("Render - Show suggestions:", showSuggestions)
 
   return (
-    <div className="h-screen flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Enhanced Background with Aurora Effect */}
-      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(139,92,246,0.1),transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(59,130,246,0.1),transparent_50%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(236,72,153,0.1),transparent_50%)]" />
@@ -624,7 +622,7 @@ export default function Home() {
       </div>
 
       {/* Floating Particles */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
         {Array.from({ length: 20 }).map((_, i) => (
           <motion.div
             key={i}
@@ -650,12 +648,12 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Enhanced Header */}
+      {/* Enhanced Header - Now sticky */}
       <motion.header 
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative z-10 bg-black/10 backdrop-blur-xl border-b border-white/10 px-6 py-4"
+        className="sticky top-0 z-50 bg-black/20 backdrop-blur-xl border-b border-white/10 px-6 py-4"
       >
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center space-x-4">
@@ -696,13 +694,12 @@ export default function Home() {
         </div>
       </motion.header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col relative z-10">
+      {/* Main Content - Now properly scrollable */}
+      <div className="container mx-auto px-4 pb-4">
         {/* Messages */}
         <div 
           ref={chatContainerRef} 
-          className="flex-1 overflow-y-auto px-6 py-8 space-y-8 scrollbar-enhanced scroll-container" 
-          style={{ paddingBottom: '120px' }}
+          className="py-8 space-y-8"
         >
           {allMessages.length === 0 && showSuggestions && !streamingMessage ? (
             <motion.div 
@@ -798,10 +795,10 @@ export default function Home() {
                         whileHover={{ y: -2 }}
                         transition={{ type: "spring", stiffness: 400, damping: 17 }}
                         className={cn(
-                          "message-container relative p-6 rounded-2xl backdrop-blur-xl shadow-2xl max-w-[80%] group",
+                          "message-container relative group",
                           message.role === "user" 
-                            ? "bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-white" 
-                            : "bg-white/5 border border-white/10 text-white"
+                            ? "p-6 rounded-2xl backdrop-blur-xl shadow-2xl max-w-[80%] bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 text-white" 
+                            : "flex-1 text-white"
                         )}
                       >
                         {message.role === "user" && message.imageData && (
@@ -826,17 +823,33 @@ export default function Home() {
                           </div>
                         )}
 
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg bg-black/20 hover:bg-black/40 backdrop-blur-sm"
-                          onClick={() => copyMessage(message.content, message.id)}
-                        >
-                          {copiedMessageId === message.id ? 
-                            <Check className="w-4 h-4 text-green-400" /> : 
-                            <Copy className="w-4 h-4 text-white/70" />
-                          }
-                        </motion.button>
+                        {message.role === "user" && (
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-all duration-200 p-2 rounded-lg bg-black/20 hover:bg-black/40 backdrop-blur-sm"
+                            onClick={() => copyMessage(message.content, message.id)}
+                          >
+                            {copiedMessageId === message.id ? 
+                              <Check className="w-4 h-4 text-green-400" /> : 
+                              <Copy className="w-4 h-4 text-white/70" />
+                            }
+                          </motion.button>
+                        )}
+
+                        {message.role === "assistant" && (
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            className="ml-4 mt-2 opacity-70 hover:opacity-100 transition-all duration-200 p-2 rounded-lg bg-white/5 hover:bg-white/10 backdrop-blur-sm"
+                            onClick={() => copyMessage(message.content, message.id)}
+                          >
+                            {copiedMessageId === message.id ? 
+                              <Check className="w-4 h-4 text-green-400" /> : 
+                              <Copy className="w-4 h-4 text-white/70" />
+                            }
+                          </motion.button>
+                        )}
                       </motion.div>
 
                       {message.role === "user" && (
@@ -865,21 +878,21 @@ export default function Home() {
                       <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
                       <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold">L</AvatarFallback>
                     </Avatar>
-                    <div className="bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl shadow-2xl">
+                    <div className="flex-1 text-white">
                       {isCreatingImages ? (
-                        <ImageGenerationAnimation isVisible={isCreatingImages} />
+                        <div className="bg-white/5 border border-white/10 rounded-2xl backdrop-blur-xl shadow-2xl">
+                          <ImageGenerationAnimation isVisible={isCreatingImages} />
+                        </div>
                       ) : (
-                        <div className="p-6">
-                          <div className="markdown-enhanced">
-                            <ReactMarkdown components={renderers}>
-                              {streamingMessage + " "}
-                            </ReactMarkdown>
-                            <motion.span
-                              animate={{ opacity: [1, 0] }}
-                              transition={{ duration: 1, repeat: Infinity }}
-                              className="inline-block w-2 h-5 bg-purple-400 ml-1 rounded-sm"
-                            />
-                          </div>
+                        <div className="markdown-enhanced">
+                          <ReactMarkdown components={renderers}>
+                            {streamingMessage + " "}
+                          </ReactMarkdown>
+                          <motion.span
+                            animate={{ opacity: [1, 0] }}
+                            transition={{ duration: 1, repeat: Infinity }}
+                            className="inline-block w-2 h-5 bg-purple-400 ml-1 rounded-sm"
+                          />
                         </div>
                       )}
                     </div>
@@ -899,8 +912,8 @@ export default function Home() {
                 <AvatarImage src="/images/luna-avatar.png" alt="Luna AI" />
                 <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white font-bold">L</AvatarFallback>
               </Avatar>
-              <div className="bg-white/5 border border-white/10 p-6 rounded-2xl backdrop-blur-xl shadow-2xl">
-                <div className="flex items-center gap-3">
+              <div className="flex-1 text-white">
+                <div className="flex items-center gap-3 py-2">
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
@@ -940,7 +953,7 @@ export default function Home() {
               initial={{ opacity: 0, scale: 0.8, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8, y: 20 }}
-              className="fixed bottom-32 right-6 z-50"
+              className="fixed bottom-24 right-6 z-40"
             >
               <motion.button
                 whileHover={{ scale: 1.1, y: -2 }}
@@ -957,13 +970,13 @@ export default function Home() {
           )}
         </AnimatePresence>
 
-        {/* Enhanced Input Area */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="relative z-10 bg-black/10 backdrop-blur-xl border-t border-white/10 p-6"
-        >
+      {/* Enhanced Input Area - Now sticky at bottom */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, delay: 0.2 }}
+        className="sticky bottom-0 z-50 bg-black/20 backdrop-blur-xl border-t border-white/10 p-6"
+      >
           <div className="max-w-4xl mx-auto">
             {imagePreview && (
               <motion.div 
@@ -1070,7 +1083,6 @@ export default function Home() {
             </form>
           </div>
         </motion.div>
-      </div>
       
       {/* API Status Monitor */}
       <ApiStatus />
@@ -1087,6 +1099,7 @@ export default function Home() {
           },
         }}
       />
+      </div>
     </div>
   )
 }
