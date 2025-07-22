@@ -208,7 +208,7 @@ input, textarea, select {
   bottom: var(--input-height);
   padding: 20px;
   padding-top: calc(20px + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(20px + var(--safe-area-inset-bottom));
+  padding-bottom: calc(40px + var(--safe-area-inset-bottom)); /* Extra padding for keyboard */
   scroll-behavior: smooth;
 }
 
@@ -226,11 +226,7 @@ input, textarea, select {
   right: 0;
   z-index: 1001;
   flex-shrink: 0;
-  /* Enhanced mobile keyboard handling */
-  transform: translateY(0);
-  transition: transform 0.2s ease-out;
-  /* Ensure it stays attached to keyboard */
-  will-change: transform;
+  /* Keep input bar fixed at bottom - no movement */
 }
 
 /* iOS specific fixes */
@@ -238,18 +234,6 @@ input, textarea, select {
   .app-input {
     position: fixed;
     bottom: env(safe-area-inset-bottom, 0px);
-    /* Prevent iOS bouncing */
-    -webkit-transform: translate3d(0, 0, 0);
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-/* Enhanced mobile input positioning - keyboard attached */
-@media screen and (max-height: 600px) {
-  .app-input {
-    position: fixed;
-    bottom: 0;
-    /* Let JavaScript handle the transform for precise keyboard attachment */
   }
 }
 
@@ -711,6 +695,8 @@ textarea {
     padding: 16px;
     top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
     bottom: calc(var(--input-height) + env(safe-area-inset-bottom, 0px));
+    /* Extra scroll space for keyboard scenarios */
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 
   .app-input {

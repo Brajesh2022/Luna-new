@@ -154,44 +154,33 @@ export default function Home() {
       }, 150)
     }
 
+    // Handle keyboard by scrolling page instead of moving input bar
+    const handleKeyboardScroll = () => {
+      // Auto-scroll to ensure input is visible when keyboard opens
+      if (!showScrollButton) {
+        setTimeout(() => {
+          scrollToBottom()
+          // Additional scroll to ensure input is fully visible
+          setTimeout(() => {
+            if (chatContainerRef.current) {
+              chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+            }
+          }, 100)
+        }, 300)
+      }
+    }
+
     // Handle visual viewport API if available (better for mobile keyboards)
     if (window.visualViewport) {
       const handleViewportChange = () => {
-        const inputElement = document.querySelector('.app-input') as HTMLElement
-        if (!inputElement) return
-        
-        // Get the actual visible area
         const visibleHeight = window.visualViewport.height
         const windowHeight = window.innerHeight
         const keyboardHeight = windowHeight - visibleHeight
         
-        if (keyboardHeight > 50) { // Keyboard is open (threshold for detecting keyboard)
-          // Position input bar right at the bottom of visible area
-          // This ensures it sits directly above the keyboard
-          inputElement.style.position = 'fixed'
-          inputElement.style.bottom = `${keyboardHeight}px`
-          inputElement.style.left = '0'
-          inputElement.style.right = '0'
-          inputElement.style.transform = 'none'
-          inputElement.style.transition = 'bottom 0.2s ease-out'
-        } else {
-          // Keyboard is closed - reset to bottom
-          inputElement.style.position = 'fixed'
-          inputElement.style.bottom = '0px'
-          inputElement.style.left = '0'
-          inputElement.style.right = '0'
-          inputElement.style.transform = 'none'
-          inputElement.style.transition = 'bottom 0.2s ease-out'
-        }
-        
-        // Scroll to bottom when keyboard opens
-        if (!showScrollButton && keyboardHeight > 50) {
-          setTimeout(() => scrollToBottom(), 150)
+        if (keyboardHeight > 50) { // Keyboard is open
+          handleKeyboardScroll()
         }
       }
-
-      // Initial call
-      handleViewportChange()
 
       window.visualViewport.addEventListener('resize', handleViewportChange)
       
@@ -206,23 +195,8 @@ export default function Home() {
         const currentHeight = window.innerHeight
         const keyboardHeight = initialHeight - currentHeight
         
-        const inputElement = document.querySelector('.app-input') as HTMLElement
-        if (!inputElement) return
-        
         if (keyboardHeight > 100) { // Keyboard is open
-          inputElement.style.position = 'fixed'
-          inputElement.style.bottom = `${keyboardHeight}px`
-          inputElement.style.left = '0'
-          inputElement.style.right = '0'
-          inputElement.style.transform = 'none'
-          inputElement.style.transition = 'bottom 0.2s ease-out'
-        } else {
-          inputElement.style.position = 'fixed'
-          inputElement.style.bottom = '0px'
-          inputElement.style.left = '0'
-          inputElement.style.right = '0'
-          inputElement.style.transform = 'none'
-          inputElement.style.transition = 'bottom 0.2s ease-out'
+          handleKeyboardScroll()
         }
       }
 
@@ -972,6 +946,20 @@ export default function Home() {
                   e.preventDefault()
                   handleSubmit(e)
                 }
+              }}
+              onFocus={() => {
+                // When input is focused, ensure it's visible by scrolling
+                setTimeout(() => {
+                  if (chatContainerRef.current) {
+                    chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+                  }
+                  // Additional delay for keyboard to open
+                  setTimeout(() => {
+                    if (chatContainerRef.current) {
+                      chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight
+                    }
+                  }, 300)
+                }, 100)
               }}
               rows={1}
               disabled={isLoading || sendStreamingMessageMutation.isPending}
