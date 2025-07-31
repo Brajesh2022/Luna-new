@@ -1709,3 +1709,694 @@ The sourcecode.txt file now contains **100% of the code** needed to replicate th
 - **Complete styling** and responsive design
 
 This is now a **complete, production-ready** source code file that can fully replicate the Luna AI Assistant project.
+### components/image-collage.tsx
+```typescript
+"use client"
+
+import { useState, useEffect } from "react"
+import { Download, Loader2, Expand } from "lucide-react"
+import ImageModal from "./image-modal"
+
+interface ImageCollageProps {
+  prompts: string[]
+  messageId?: number
+}
+
+interface ImageStatus {
+  url: string
+  loaded: boolean
+  error: boolean
+  prompt: string
+}
+
+export default function ImageCollage({ prompts, messageId }: ImageCollageProps) {
+  const [images, setImages] = useState<ImageStatus[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<ImageStatus | null>(null)
+
+  useEffect(() => {
+    const imageStatuses = prompts.map((prompt) => ({
+      url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`,
+      loaded: false,
+      error: false,
+      prompt: prompt,
+    }))
+    setImages(imageStatuses)
+  }, [messageId])
+
+  const handleImageLoad = (index: number) => {
+    setImages((prev) => prev.map((img, i) => (i === index ? { ...img, loaded: true } : img)))
+  }
+
+  const handleImageError = (index: number) => {
+    setImages((prev) => prev.map((img, i) => (i === index ? { ...img, error: true, loaded: true } : img)))
+  }
+
+  const downloadImage = async (url: string, index: number) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = `luna-ai-image-${index + 1}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error("Download failed:", error)
+    }
+  }
+
+  const handleImageClick = (image: ImageStatus) => {
+    setSelectedImage(image)
+    setModalOpen(true)
+  }
+
+  return (
+    <div className="relative space-y-3">
+      <div className="text-white/70 text-sm mb-3">Generated 4 image variations for you:</div>
+
+      <div className="grid grid-cols-2 gap-3 w-full">
+        {images.map((image, index) => (
+          <div
+            key={`${messageId}-${index}`}
+            className="relative aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-purple-700/20 border border-purple-500/20 group cursor-pointer"
+            onClick={() => handleImageClick(image)}
+          >
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-2">
+                  <Loader2 className="h-6 w-6 text-purple-400 animate-spin mx-auto" />
+                  <p className="text-white/60 text-xs">Generating...</p>
+                </div>
+              </div>
+            )}
+
+            {image.error && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-2">
+                  <div className="text-red-400 text-xs">Failed to load</div>
+                </div>
+              </div>
+            )}
+
+            <img
+              src={image.url || "/placeholder.svg"}
+              alt={`Generated image ${index + 1}`}
+              onLoad={() => handleImageLoad(index)}
+              onError={() => handleImageError(index)}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${
+              }`}
+            />
+
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleImageClick(image)
+                  }}
+                  className="p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
+                  title="View larger"
+                >
+                  <Expand className="h-3 w-3 text-white" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    downloadImage(image.url, index)
+                  }}
+                  className="p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
+                  title="Download image"
+                >
+                  <Download className="h-3 w-3 text-white" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="text-white/50 text-xs mt-2">
+        Click any image to view it larger. Use the download button to save images.
+      </div>
+
+      {selectedImage && (
+        <ImageModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          imageUrl={selectedImage.url}
+          prompt={selectedImage.prompt}
+        />
+      )}
+    </div>
+  )
+}
+```
+### components/image-generation-animation.tsx
+```typescript
+import React, { useEffect, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Palette, Sparkles, Wand2, Stars, Zap, Brush } from "lucide-react"
+
+interface ImageGenerationAnimationProps {
+  isVisible: boolean
+}
+
+const ImageGenerationAnimation: React.FC<ImageGenerationAnimationProps> = ({ isVisible }) => {
+  const [currentPhase, setCurrentPhase] = useState(0)
+  const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; delay: number }>>([])
+
+  const phases = [
+    { icon: Sparkles, text: "Igniting creativity...", color: "from-purple-400 to-pink-400" },
+    { icon: Palette, text: "Mixing colors...", color: "from-blue-400 to-purple-400" },
+    { icon: Brush, text: "Painting masterpiece...", color: "from-green-400 to-blue-400" },
+    { icon: Wand2, text: "Adding magic...", color: "from-yellow-400 to-orange-400" },
+    { icon: Stars, text: "Finalizing creation...", color: "from-pink-400 to-purple-400" },
+  ]
+
+  useEffect(() => {
+
+    const newParticles = Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      delay: Math.random() * 2,
+    }))
+    setParticles(newParticles)
+
+    const interval = setInterval(() => {
+      setCurrentPhase((prev) => (prev + 1) % phases.length)
+    }, 1500)
+
+    return () => clearInterval(interval)
+  }, [isVisible, phases.length])
+
+
+  const currentPhaseData = phases[currentPhase]
+  const Icon = currentPhaseData.icon
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
+        className="relative space-y-3 w-full image-generation-container"
+      >
+        <div className="text-white/70 text-sm mb-3">Creating 4 image variations for you:</div>
+
+        <div className="grid grid-cols-2 gap-3 w-full">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="relative aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-purple-700/20 border border-purple-500/20"
+            >
+              <motion.div
+                className="absolute inset-0 opacity-30"
+                animate={{
+                  background: [
+                    "radial-gradient(circle at 20% 50%, #8b5cf6 0%, transparent 50%)",
+                    "radial-gradient(circle at 80% 50%, #06b6d4 0%, transparent 50%)",
+                    "radial-gradient(circle at 50% 20%, #f59e0b 0%, transparent 50%)",
+                    "radial-gradient(circle at 50% 80%, #ec4899 0%, transparent 50%)",
+                    "radial-gradient(circle at 20% 50%, #8b5cf6 0%, transparent 50%)",
+                  ],
+                }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "linear",
+                  delay: index * 0.5,
+                }}
+              />
+
+              {particles.slice(index * 5, (index + 1) * 5).map((particle, particleIndex) => (
+                <motion.div
+                  key={`${index}-${particleIndex}`}
+                  className="absolute w-1 h-1 bg-white/40 rounded-full"
+                  initial={{ 
+                    left: `${particle.x}%`, 
+                    top: `${particle.y}%`,
+                    opacity: 0,
+                    scale: 0 
+                  }}
+                  animate={{
+                    opacity: [0, 1, 0],
+                    scale: [0, 1, 0],
+                    y: [0, -20, -40],
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    delay: particle.delay + index * 0.2,
+                    ease: "easeOut",
+                  }}
+                />
+              ))}
+
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <motion.div
+                  className="relative mb-2"
+                  animate={{ rotate: 360 }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "linear",
+                    delay: index * 0.3,
+                  }}
+                >
+                  <motion.div
+                    className="absolute -inset-2 rounded-full border border-white/20"
+                    animate={{
+                      scale: [1, 1.2, 1],
+                      opacity: [0.5, 0.8, 0.5],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: index * 0.2,
+                    }}
+                  />
+
+                  <motion.div
+                    className={`w-8 h-8 rounded-full bg-gradient-to-r ${currentPhaseData.color} flex items-center justify-center shadow-lg`}
+                    animate={{
+                      scale: [1, 1.1, 1],
+                      boxShadow: [
+                        "0 0 0 rgba(139, 92, 246, 0)",
+                        "0 0 15px rgba(139, 92, 246, 0.5)",
+                        "0 0 0 rgba(139, 92, 246, 0)",
+                      ],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: index * 0.1,
+                    }}
+                  >
+                    <Icon className="w-4 h-4 text-white" />
+                  </motion.div>
+                </motion.div>
+
+                <p className="text-white/60 text-xs text-center">Generating...</p>
+              </div>
+
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent transform skew-x-12"
+                animate={{
+                  x: ['-100%', '100%'],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "linear",
+                  delay: index * 0.5,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        <motion.div
+          key={currentPhase}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <p className="text-white/90 font-medium text-sm">{currentPhaseData.text}</p>
+        </motion.div>
+
+        <div className="flex justify-center space-x-1">
+          {phases.map((_, index) => (
+            <motion.div
+              key={index}
+              className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                index === currentPhase ? 'bg-white' : 'bg-white/30'
+              }`}
+              animate={{
+                scale: index === currentPhase ? [1, 1.2, 1] : 1,
+              }}
+              transition={{
+                duration: 0.5,
+                repeat: index === currentPhase ? Infinity : 0,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="text-white/50 text-xs mt-2">
+          AI is crafting your images with creativity and precision...
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+export default ImageGenerationAnimation
+```
+### components/typing-effect.tsx
+```typescript
+"use client"
+
+import { useState, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
+
+interface TypingEffectProps {
+  text: string
+  speed?: number
+  onComplete?: () => void
+  renderers?: any
+}
+
+export default function TypingEffect({ text, speed = 10, onComplete, renderers }: TypingEffectProps) {
+  const [displayedText, setDisplayedText] = useState("")
+  const [currentIndex, setCurrentIndex] = useState(0)
+
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      const timer = setTimeout(() => {
+        setDisplayedText((prev) => prev + text[currentIndex])
+        setCurrentIndex((prev) => prev + 1)
+      }, speed)
+
+      return () => clearTimeout(timer)
+    } else if (onComplete) {
+      onComplete()
+    }
+  }, [currentIndex, text, speed, onComplete])
+
+  useEffect(() => {
+    setDisplayedText("")
+    setCurrentIndex(0)
+  }, [text])
+
+  return (
+    <div className="inline">
+      <ReactMarkdown components={renderers}>{displayedText}</ReactMarkdown>
+      {currentIndex < text.length && <span className="inline-block w-0.5 h-4 bg-purple-400 ml-0.5 animate-pulse" />}
+    </div>
+  )
+}
+```
+
+### components/api-status.tsx
+```typescript
+"use client"
+
+import { useState, useEffect } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react"
+
+interface ApiKeyStatus {
+  index: number
+  status: 'active' | 'failed' | 'unknown'
+  lastUsed?: Date
+  error?: string
+}
+
+export default function ApiStatus() {
+  const [apiStatuses, setApiStatuses] = useState<ApiKeyStatus[]>([
+    { index: 1, status: 'unknown' },
+    { index: 2, status: 'unknown' },
+    { index: 3, status: 'unknown' },
+    { index: 4, status: 'unknown' },
+  ])
+  
+  const [currentActiveKey, setCurrentActiveKey] = useState<number | null>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    const originalConsoleLog = console.log
+    const originalConsoleWarn = console.warn
+    
+    console.log = (...args) => {
+      const message = args.join(' ')
+      
+      if (message.includes('✅ Successfully used API key')) {
+        const match = message.match(/API key (\d+)/)
+        if (match) {
+          const keyIndex = parseInt(match[1])
+          setCurrentActiveKey(keyIndex)
+          setApiStatuses(prev => 
+            prev.map(status => 
+              status.index === keyIndex 
+                ? { ...status, status: 'active' as const, lastUsed: new Date() }
+                : status
+            )
+          )
+        }
+      }
+      
+      if (message.includes('⚠️ Retryable error with API key')) {
+        const match = message.match(/API key (\d+)/)
+        if (match) {
+          const keyIndex = parseInt(match[1])
+          setApiStatuses(prev => 
+            prev.map(status => 
+              status.index === keyIndex 
+                ? { ...status, status: 'failed' as const, error: 'Rate limit or quota exceeded' }
+                : status
+            )
+          )
+        }
+      }
+      
+      originalConsoleLog.apply(console, args)
+    }
+    
+    console.warn = (...args) => {
+      const message = args.join(' ')
+      
+      if (message.includes('API key') && message.includes('failed')) {
+        const match = message.match(/API key (\d+)/)
+        if (match) {
+          const keyIndex = parseInt(match[1])
+          setApiStatuses(prev => 
+            prev.map(status => 
+              status.index === keyIndex 
+                ? { ...status, status: 'failed' as const, error: 'API request failed' }
+                : status
+            )
+          )
+        }
+      }
+      
+      originalConsoleWarn.apply(console, args)
+    }
+    
+    return () => {
+      console.log = originalConsoleLog
+      console.warn = originalConsoleWarn
+    }
+  }, [])
+
+  const getStatusIcon = (status: ApiKeyStatus['status']) => {
+    switch (status) {
+      case 'active':
+        return <CheckCircle className="w-4 h-4 text-green-400" />
+      case 'failed':
+        return <XCircle className="w-4 h-4 text-red-400" />
+      default:
+        return <Clock className="w-4 h-4 text-gray-400" />
+    }
+  }
+
+  const getStatusColor = (status: ApiKeyStatus['status']) => {
+    switch (status) {
+      case 'active':
+        return 'bg-green-500/20 text-green-400 border-green-400/30'
+      case 'failed':
+        return 'bg-red-500/20 text-red-400 border-red-400/30'
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-400/30'
+    }
+  }
+
+  const hasFailures = apiStatuses.some(status => status.status === 'failed')
+  const activeKeys = apiStatuses.filter(status => status.status === 'active').length
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50">
+      <div className="flex items-center gap-2">
+        <div
+          className="p-2 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 cursor-pointer hover:bg-black/30 transition-colors"
+        >
+          {hasFailures ? (
+            <AlertTriangle className="w-5 h-5 text-yellow-400" />
+          ) : (
+            <CheckCircle className="w-5 h-5 text-green-400" />
+          )}
+        </div>
+
+        {isVisible && (
+          <Card className="w-80 bg-black/20 backdrop-blur-xl border border-white/10 text-white">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                API Key Status
+                {currentActiveKey && (
+                  <Badge variant="secondary" className="bg-purple-500/20 text-purple-400">
+                    Using Key {currentActiveKey}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-white/60">Active Keys:</div>
+                <div className="text-green-400">{activeKeys}/4</div>
+                <div className="text-white/60">Failed Keys:</div>
+                <div className="text-red-400">{apiStatuses.filter(s => s.status === 'failed').length}/4</div>
+              </div>
+              
+              <div className="space-y-2">
+                {apiStatuses.map((status) => (
+                  <div
+                    key={status.index}
+                    className={`p-2 rounded-lg border flex items-center justify-between ${getStatusColor(status.status)}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(status.status)}
+                      <span className="font-medium">Key {status.index}</span>
+                      {status.index === currentActiveKey && (
+                        <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    {status.lastUsed && (
+                      <span className="text-xs opacity-70">
+                        {status.lastUsed.toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {hasFailures && (
+                <div className="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-xs text-yellow-400">
+                    Some API keys are experiencing issues. Automatic fallback is active.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+### components/ui/sonner.tsx
+```typescript
+"use client"
+
+import { useTheme } from "next-themes"
+import { Toaster as Sonner } from "sonner"
+
+type ToasterProps = React.ComponentProps<typeof Sonner>
+
+const Toaster = ({ ...props }: ToasterProps) => {
+  const { theme = "system" } = useTheme()
+
+  return (
+    <Sonner
+      theme={theme as ToasterProps["theme"]}
+      className="toaster group"
+      toastOptions={{
+        classNames: {
+          toast:
+            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+          description: "group-[.toast]:text-muted-foreground",
+          actionButton:
+            "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
+          cancelButton:
+            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+        },
+      }}
+      {...props}
+    />
+  )
+}
+
+export { Toaster }
+```
+
+### components/ui/tooltip.tsx
+```typescript
+"use client"
+
+import * as React from "react"
+import * as TooltipPrimitive from "@radix-ui/react-tooltip"
+
+import { cn } from "@/lib/utils"
+
+const TooltipProvider = TooltipPrimitive.Provider
+
+const Tooltip = TooltipPrimitive.Root
+
+const TooltipTrigger = TooltipPrimitive.Trigger
+
+const TooltipContent = React.forwardRef<
+  React.ElementRef<typeof TooltipPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
+>(({ className, sideOffset = 4, ...props }, ref) => (
+  <TooltipPrimitive.Content
+    ref={ref}
+    sideOffset={sideOffset}
+    className={cn(
+      "z-50 overflow-hidden rounded-md border bg-popover px-3 py-1.5 text-sm text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+      className
+    )}
+    {...props}
+  />
+))
+TooltipContent.displayName = TooltipPrimitive.Content.displayName
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider }
+```
+
+### components/ui/toaster.tsx
+```typescript
+"use client"
+
+import { useToast } from "@/hooks/use-toast"
+import {
+  Toast,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from "@/components/ui/toast"
+
+export function Toaster() {
+  const { toasts } = useToast()
+
+  return (
+    <ToastProvider>
+      {toasts.map(function ({ id, title, description, action, ...props }) {
+        return (
+          <Toast key={id} {...props}>
+            <div className="grid gap-1">
+              {title && <ToastTitle>{title}</ToastTitle>}
+              {description && (
+                <ToastDescription>{description}</ToastDescription>
+              )}
+            </div>
+            {action}
+            <ToastClose />
+          </Toast>
+        )
+      })}
+      <ToastViewport />
+    </ToastProvider>
+  )
+}
+```
