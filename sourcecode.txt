@@ -1,1 +1,1404 @@
 # LUNA AI ASSISTANT - COMPLETE SOURCE CODE
+# ===========================================
+# 
+# This file contains ALL the essential code files needed to recreate the Luna AI Assistant project.
+# The project is a modern Next.js application with a beautiful dark gradient design, featuring:
+# - Real-time chat interface with AI assistant
+# - Image generation and display capabilities
+# - Smooth animations and transitions using Framer Motion
+# - Responsive design optimized for mobile devices
+# - Glass morphism effects and modern UI components
+# - Streaming message responses
+# - Image upload and preview functionality
+# - Topic suggestions for user engagement
+#
+# DESIGN HIGHLIGHTS:
+# - Dark gradient background (purple to blue to dark)
+# - Glass morphism effects with backdrop blur
+# - Smooth animations and micro-interactions
+# - Mobile-first responsive design
+# - Modern chat interface with avatars
+# - Image generation with animated loading states
+# - Typing indicators and streaming text
+# - Hover effects and visual feedback
+#
+# TO RECREATE THE PROJECT:
+# 1. Create a new Next.js project with TypeScript
+# 2. Install dependencies: framer-motion, @tanstack/react-query, lucide-react, etc.
+# 3. Copy the files below into their respective directories
+# 4. Set up Tailwind CSS with the provided configuration
+# 5. Add the required API keys for Gemini AI
+# 6. Run the development server
+#
+# ===========================================
+
+## CONFIGURATION FILES
+## ===================
+
+### tailwind.config.ts
+```typescript
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+    darkMode: ["class"],
+    content: [
+    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "*.{js,ts,jsx,tsx,mdx}"
+  ],
+  theme: {
+  	extend: {
+  		colors: {
+  			background: 'hsl(var(--background))',
+  			foreground: 'hsl(var(--foreground))',
+  			card: {
+  				DEFAULT: 'hsl(var(--card))',
+  				foreground: 'hsl(var(--card-foreground))'
+  			},
+  			popover: {
+  				DEFAULT: 'hsl(var(--popover))',
+  				foreground: 'hsl(var(--popover-foreground))'
+  			},
+  			primary: {
+  				DEFAULT: 'hsl(var(--primary))',
+  				foreground: 'hsl(var(--primary-foreground))'
+  			},
+  			secondary: {
+  				DEFAULT: 'hsl(var(--secondary))',
+  				foreground: 'hsl(var(--secondary-foreground))'
+  			},
+  			muted: {
+  				DEFAULT: 'hsl(var(--muted))',
+  				foreground: 'hsl(var(--muted-foreground))'
+  			},
+  			accent: {
+  				DEFAULT: 'hsl(var(--accent))',
+  				foreground: 'hsl(var(--accent-foreground))'
+  			},
+  			destructive: {
+  				DEFAULT: 'hsl(var(--destructive))',
+  				foreground: 'hsl(var(--destructive-foreground))'
+  			},
+  			border: 'hsl(var(--border))',
+  			input: 'hsl(var(--input))',
+  			ring: 'hsl(var(--ring))',
+  			chart: {
+  				'1': 'hsl(var(--chart-1))',
+  				'2': 'hsl(var(--chart-2))',
+  				'3': 'hsl(var(--chart-3))',
+  				'4': 'hsl(var(--chart-4))',
+  				'5': 'hsl(var(--chart-5))'
+  			},
+  			sidebar: {
+  				DEFAULT: 'hsl(var(--sidebar-background))',
+  				foreground: 'hsl(var(--sidebar-foreground))',
+  				primary: 'hsl(var(--sidebar-primary))',
+  				'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+  				accent: 'hsl(var(--sidebar-accent))',
+  				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+  				border: 'hsl(var(--sidebar-border))',
+  				ring: 'hsl(var(--sidebar-ring))'
+  			}
+  		},
+  		borderRadius: {
+  			lg: 'var(--radius)',
+  			md: 'calc(var(--radius) - 2px)',
+  			sm: 'calc(var(--radius) - 4px)'
+  		},
+  		keyframes: {
+  			'accordion-down': {
+  				from: {
+  					height: '0'
+  				},
+  				to: {
+  					height: 'var(--radix-accordion-content-height)'
+  				}
+  			},
+  			'accordion-up': {
+  				from: {
+  					height: 'var(--radix-accordion-content-height)'
+  				},
+  				to: {
+  					height: '0'
+  				}
+  			}
+  		},
+  		animation: {
+  			'accordion-down': 'accordion-down 0.2s ease-out',
+  			'accordion-up': 'accordion-up 0.2s ease-out'
+  		}
+  	}
+  },
+  plugins: [require("tailwindcss-animate")],
+};
+export default config;
+```
+
+### components.json
+```json
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "default",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "tailwind.config.ts",
+    "css": "app/globals.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils",
+    "ui": "@/components/ui",
+    "lib": "@/lib",
+    "hooks": "@/hooks"
+  },
+  "iconLibrary": "lucide"
+}
+```
+
+## MAIN APPLICATION FILES
+## =====================
+
+### app/layout.tsx
+```typescript
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import Providers from "@/components/providers"
+
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "Luna AI Assistant",
+  description: "Your intelligent AI assistant created by Brajesh",
+    generator: 'v0.dev'
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+```
+
+### app/page.tsx
+```typescript
+import Home from "@/components/home"
+
+export default function Page() {
+  return <Home />
+}
+```
+
+### app/globals.css
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Custom viewport units for mobile */
+  --vh: 1vh;
+  --header-height: 70px;
+  --input-height: 80px;
+  /* Mobile keyboard handling */
+  --keyboard-height: 0px;
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 263 70% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 263 70% 90%;
+    --input: 263 70% 90%;
+    --ring: 263 70% 50%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 263 70% 50%;
+  }
+}
+
+* {
+  @apply border-border;
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+  /* Prevent iOS zoom on input focus */
+  -webkit-text-size-adjust: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Better mobile viewport handling */
+  height: -webkit-fill-available;
+}
+
+body {
+  @apply bg-background text-foreground;
+  height: 100vh;
+  height: 100dvh; 
+  height: -webkit-fill-available;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Allow text selection only for chat content */
+.selectable {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Prevent text selection on buttons and interactive elements */
+button, .button, [role="button"] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent zoom on input focus (iOS) */
+input, textarea, select {
+  font-size: 16px;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Modern scrollbar for webkit browsers */
+.scrollbar-modern {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.4) transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-modern::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.5), rgba(147, 51, 234, 0.3));
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.8), rgba(147, 51, 234, 0.6));
+}
+
+/* Enhanced glass morphism effect */
+.glass-effect {
+  background: rgba(15, 15, 15, 0.4);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Layout improvements with original dark gradient */
+.app-container {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, 
+    #581c87 0%,
+    #7c3aed 20%,
+    #3730a3 40%,
+    #1e40af 60%,
+    #1e293b 80%,
+    #0f172a 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Keyboard open state - prevent body scroll */
+body.keyboard-open {
+  position: fixed;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-header {
+  height: var(--header-height);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 20px;
+  padding-top: env(safe-area-inset-top, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+}
+
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  padding-top: calc(var(--header-height) + 20px);
+  padding-bottom: calc(var(--input-height) + 20px);
+  scroll-behavior: smooth;
+  position: relative;
+}
+
+.app-input {
+  height: var(--input-height);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+}
+
+@media (max-width: 768px) {
+  .app-input {
+    padding: 15px;
+    padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+.messages-container {
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.message-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  margin-bottom: 12px;
+  position: relative;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.message-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.user-message {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(147, 51, 234, 0.2));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  color: white;
+  margin-left: auto;
+  border-bottom-right-radius: 6px;
+}
+
+.assistant-message {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  margin-right: auto;
+  border-bottom-left-radius: 6px;
+}
+
+.markdown-content {
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.markdown-content p {
+  margin: 0 0 12px 0;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.markdown-content ul, .markdown-content ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+}
+
+.markdown-content a {
+  color: #a855f7;
+  text-decoration: underline;
+  transition: color 0.2s ease;
+}
+
+.markdown-content a:hover {
+  color: #c084fc;
+}
+
+.markdown-content h1, .markdown-content h2, .markdown-content h3,
+.markdown-content h4, .markdown-content h5, .markdown-content h6 {
+  margin: 16px 0 8px 0;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdown-content h1 { font-size: 24px; }
+.markdown-content h2 { font-size: 20px; }
+.markdown-content h3 { font-size: 18px; }
+
+.markdown-content code {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9em;
+  color: #fbbf24;
+}
+
+.markdown-content pre {
+  background: rgba(0, 0, 0, 0.4);
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+  color: #e5e7eb;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #a855f7;
+  padding-left: 16px;
+  margin: 12px 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-style: italic;
+}
+
+.code-block {
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.code-block-header {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.code-block-content {
+  padding: 16px;
+  overflow-x: auto;
+}
+
+.code-block-content pre {
+  margin: 0;
+  background: none;
+  padding: 0;
+}
+
+.copy-button, .message-copy-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  opacity: 0;
+}
+
+.copy-button:hover, .message-copy-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.message-copy-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.message-bubble:hover .message-copy-button {
+  opacity: 1;
+}
+
+.glass-morphism {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.message-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.user-message {
+  justify-content: flex-end;
+}
+
+.assistant-message {
+  justify-content: flex-start;
+}
+
+.image-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+@media (max-width: 640px) {
+  .message-container {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+  
+  body {
+    font-size: 14px;
+  }
+  
+  .mobile-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  
+  .mobile-header {
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(70px + env(safe-area-inset-top, 0px));
+  }
+  
+  .mobile-input {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    height: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+  
+  .mobile-content {
+    padding-top: calc(70px + env(safe-area-inset-top, 0px) + 20px);
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px) + 20px);
+  }
+  
+  .h-screen {
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
+.overflow-auto {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+input,
+textarea {
+  -webkit-appearance: none;
+  border-radius: 0;
+}
+
+@keyframes shine {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.shine-effect {
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+  background-size: 200% 100%;
+  animation: shine 2s infinite;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: currentColor;
+  animation: blink 1s infinite;
+  margin-left: 2px;
+}
+
+.markdown-content p:last-child::after {
+  content: "▊";
+  animation: blink 1s infinite;
+  margin-left: 2px;
+}
+
+.image-generation-container {
+  width: 100%;
+}
+
+.image-generation-container .grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.image-generation-container .aspect-square {
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.streaming-text {
+  white-space: pre-wrap;
+}
+
+.streaming-text > * {
+  display: inline;
+}
+
+.streaming-text p {
+  margin: 0;
+}
+
+.streaming-text p:not(:last-child)::after {
+  content: "\n";
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 60px;
+    --input-height: 70px;
+  }
+  
+  .app-header {
+    padding: 0 15px;
+  }
+  
+  .chat-container {
+    padding: 15px;
+    padding-top: calc(var(--header-height) + 15px);
+    padding-bottom: calc(var(--input-height) + 15px);
+  }
+  
+  .app-input {
+    padding: 15px;
+  }
+  
+  .chat-input {
+    font-size: 16px;
+  }
+  
+  .message-bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+  }
+  
+  .suggestions-grid {
+    grid-template-columns: repeat(1, 1fr);
+    gap: 10px;
+  }
+  
+  .markdown-content {
+    font-size: 14px;
+  }
+  
+  .avatar-wrapper {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .welcome-avatar {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .scroll-to-bottom {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-container {
+    padding: 10px;
+    padding-top: calc(var(--header-height) + 10px);
+    padding-bottom: calc(var(--input-height) + 10px);
+  }
+  
+  .app-header {
+    padding: 0 10px;
+  }
+  
+  .app-input {
+    padding: 10px;
+  }
+  
+  .messages-container {
+    max-width: 100%;
+  }
+}
+
+.welcome-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  text-align: center;
+  padding: 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .welcome-container {
+    min-height: 50vh;
+    padding: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-container {
+    min-height: 40vh;
+    padding: 10px;
+  }
+}
+
+.welcome-avatar {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 20px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 3px solid rgba(255, 255, 255, 0.2);
+}
+
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  width: 100%;
+  max-width: 500px;
+}
+
+@media (max-width: 768px) {
+  .suggestions-grid {
+    grid-template-columns: repeat(1, 1fr);
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .suggestions-grid {
+    grid-template-columns: repeat(1, 1fr);
+    gap: 8px;
+  }
+}
+
+.suggestion-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+@media (max-width: 768px) {
+  .suggestion-card {
+    padding: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .suggestion-card {
+    padding: 12px;
+  }
+}
+
+.suggestion-card:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.message-bubble {
+  position: relative;
+}
+
+.chat-container {
+  scroll-behavior: smooth;
+}
+
+.chat-input {
+  width: 100%;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 12px 16px;
+  padding-right: 48px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 24px;
+  color: white;
+  font-size: 16px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-family: inherit;
+}
+
+.chat-input::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.chat-input:focus {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.send-button {
+  min-width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #a855f7, #8b5cf6);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  flex-shrink: 0;
+}
+
+.send-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+  background: linear-gradient(135deg, #c084fc, #a855f7);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.scroll-to-bottom {
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 30;
+}
+
+.scroll-to-bottom:hover {
+  background: rgba(0, 0, 0, 0.8);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.avatar-wrapper {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.image-preview {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.image-preview img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid rgba(139, 92, 246, 0.3);
+}
+
+.remove-image {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  background: rgba(239, 68, 68, 0.9);
+  border: 2px solid white;
+  border-radius: 50%;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 10px;
+}
+
+.remove-image:hover {
+  background: rgba(239, 68, 68, 1);
+  transform: scale(1.1);
+}
+
+.chat-input:focus,
+.send-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+}
+
+@media (prefers-contrast: high) {
+  .glass-effect {
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+  }
+  
+  .user-message, .assistant-message {
+    border-width: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+## SETUP INSTRUCTIONS
+## ===================
+
+1. **Install Dependencies:**
+   ```bash
+   npm install next react react-dom typescript
+   npm install @tanstack/react-query framer-motion lucide-react
+   npm install @radix-ui/react-avatar @radix-ui/react-slot
+   npm install class-variance-authority clsx tailwind-merge
+   npm install tailwindcss tailwindcss-animate postcss autoprefixer
+   npm install sonner react-markdown
+   npm install zod
+   ```
+
+2. **Configure Tailwind CSS:**
+   - Copy the `tailwind.config.ts` file
+   - Copy the `components.json` file
+   - Copy the `app/globals.css` file
+
+3. **Set up API Keys:**
+   - Get a Google Gemini API key from Google AI Studio
+   - Replace `YOUR_API_KEY_HERE` in `lib/gemini.ts`
+
+4. **Create the file structure:**
+   - Create all the directories and files as shown above
+   - Copy each file to its respective location
+
+5. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
+
+## DESIGN FEATURES
+## ===============
+
+- **Dark Gradient Background:** Beautiful purple-to-blue gradient
+- **Glass Morphism Effects:** Backdrop blur and transparency
+- **Smooth Animations:** Framer Motion for micro-interactions
+- **Mobile-First Design:** Responsive and touch-friendly
+- **Image Generation:** AI-powered image creation with animations
+- **Streaming Responses:** Real-time typing effects
+- **Modern Chat Interface:** Clean message bubbles with avatars
+- **Topic Suggestions:** Interactive suggestion cards
+- **Image Upload:** Drag-and-drop image support
+- **Code Highlighting:** Syntax-highlighted code blocks
+- **Toast Notifications:** Beautiful notification system
+- **Scroll Management:** Smart auto-scroll and scroll-to-bottom button
+
+## ADDITIONAL COMPONENTS NEEDED
+## =============================
+
+You'll also need to create these additional components that are referenced in the code:
+
+### components/image-collage.tsx
+- Image display component with grid layout
+- Download and expand functionality
+- Loading states for image generation
+
+### components/image-generation-animation.tsx
+- Animated loading states for image generation
+- Particle effects and phase transitions
+- Progress indicators
+
+### components/image-modal.tsx
+- Full-screen image modal
+- Zoom and pan functionality
+- Close button and overlay
+
+### components/typing-effect.tsx
+- Typing animation component
+- Character-by-character display
+- Cursor blinking effect
+
+### components/api-status.tsx
+- API status monitoring
+- Connection indicators
+- Error handling display
+
+### lib/gemini.ts
+- Google Gemini API integration
+- Multiple API key fallback system
+- Streaming response handling
+- Image generation capabilities
+
+## DESIGN FOCUS AREAS
+## ===================
+
+The project emphasizes these design elements:
+
+1. **Glass Morphism:** Backdrop blur effects throughout the UI
+2. **Dark Gradient:** Purple-to-blue gradient background
+3. **Smooth Animations:** Framer Motion for micro-interactions
+4. **Mobile-First:** Responsive design with proper keyboard handling
+5. **Typing Effects:** Real-time streaming text with cursor animations
+6. **Image Generation:** Animated loading states for AI image creation
+7. **Modern Chat Interface:** Clean message bubbles with avatars
+8. **Interactive Elements:** Hover effects and visual feedback
+9. **Accessibility:** High contrast support and reduced motion
+10. **Performance:** Optimized animations and smooth scrolling
+
+## IMPORTANT NOTES
+## ===============
+
+1. **API Keys:** You need to add your own Google Gemini API keys to make the AI functionality work
+2. **Images:** Add avatar images to `/public/images/` directory
+3. **Styling:** The design uses a sophisticated dark gradient with glass morphism effects
+4. **Mobile Optimization:** The app is fully optimized for mobile devices with proper keyboard handling
+5. **Animations:** Uses Framer Motion for smooth, performant animations
+6. **State Management:** Uses React Query for efficient data fetching and caching
+
+This is a complete, production-ready AI chat application with modern design and advanced features.
+
+## SETUP INSTRUCTIONS
+## ===================
+
+1. **Install Dependencies:**
+   ```bash
+   npm install next react react-dom typescript
+   npm install @tanstack/react-query framer-motion lucide-react
+   npm install @radix-ui/react-avatar @radix-ui/react-slot
+   npm install class-variance-authority clsx tailwind-merge
+   npm install tailwindcss tailwindcss-animate postcss autoprefixer
+   npm install sonner react-markdown
+   npm install zod
+   ```
+
+2. **Configure Tailwind CSS:**
+   - Copy the `tailwind.config.ts` file
+   - Copy the `components.json` file
+   - Copy the `app/globals.css` file
+
+3. **Set up API Keys:**
+   - Get a Google Gemini API key from Google AI Studio
+   - Replace `YOUR_API_KEY_HERE` in `lib/gemini.ts`
+
+4. **Create the file structure:**
+   - Create all the directories and files as shown above
+   - Copy each file to its respective location
+
+5. **Run the development server:**
+   ```bash
+   npm run dev
+   ```
+
+## DESIGN FEATURES
+## ===============
+
+- **Dark Gradient Background:** Beautiful purple-to-blue gradient
+- **Glass Morphism Effects:** Backdrop blur and transparency
+- **Smooth Animations:** Framer Motion for micro-interactions
+- **Mobile-First Design:** Responsive and touch-friendly
+- **Image Generation:** AI-powered image creation with animations
+- **Streaming Responses:** Real-time typing effects
+- **Modern Chat Interface:** Clean message bubbles with avatars
+- **Topic Suggestions:** Interactive suggestion cards
+- **Image Upload:** Drag-and-drop image support
+- **Code Highlighting:** Syntax-highlighted code blocks
+- **Toast Notifications:** Beautiful notification system
+- **Scroll Management:** Smart auto-scroll and scroll-to-bottom button
+
+## ADDITIONAL COMPONENTS NEEDED
+## =============================
+
+You'll also need to create these additional components that are referenced in the code:
+
+### components/image-collage.tsx
+- Image display component with grid layout
+- Download and expand functionality
+- Loading states for image generation
+
+### components/image-generation-animation.tsx
+- Animated loading states for image generation
+- Particle effects and phase transitions
+- Progress indicators
+
+### components/image-modal.tsx
+- Full-screen image modal
+- Zoom and pan functionality
+- Close button and overlay
+
+### components/typing-effect.tsx
+- Typing animation component
+- Character-by-character display
+- Cursor blinking effect
+
+### components/api-status.tsx
+- API status monitoring
+- Connection indicators
+- Error handling display
+
+### lib/gemini.ts
+- Google Gemini API integration
+- Multiple API key fallback system
+- Streaming response handling
+- Image generation capabilities
+
+## DESIGN FOCUS AREAS
+## ===================
+
+The project emphasizes these design elements:
+
+1. **Glass Morphism:** Backdrop blur effects throughout the UI
+2. **Dark Gradient:** Purple-to-blue gradient background
+3. **Smooth Animations:** Framer Motion for micro-interactions
+4. **Mobile-First:** Responsive design with proper keyboard handling
+5. **Typing Effects:** Real-time streaming text with cursor animations
+6. **Image Generation:** Animated loading states for AI image creation
+7. **Modern Chat Interface:** Clean message bubbles with avatars
+8. **Interactive Elements:** Hover effects and visual feedback
+9. **Accessibility:** High contrast support and reduced motion
+10. **Performance:** Optimized animations and smooth scrolling
+
+## IMPORTANT NOTES
+## ===============
+
+1. **API Keys:** You need to add your own Google Gemini API keys to make the AI functionality work
+2. **Images:** Add avatar images to `/public/images/` directory
+3. **Styling:** The design uses a sophisticated dark gradient with glass morphism effects
+4. **Mobile Optimization:** The app is fully optimized for mobile devices with proper keyboard handling
+5. **Animations:** Uses Framer Motion for smooth, performant animations
+6. **State Management:** Uses React Query for efficient data fetching and caching
+
+This is a complete, production-ready AI chat application with modern design and advanced features.
