@@ -1186,3 +1186,478 @@ textarea {
     transition-duration: 0.01ms !important;
   }
 }
+
+=== components/providers.tsx ===
+"use client"
+
+import { QueryClientProvider } from "@tanstack/react-query"
+import { queryClient } from "@/lib/queryClient"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { Toaster } from "@/components/ui/toaster"
+import type { ReactNode } from "react"
+
+/**
+ * Groups all client-only providers so the server-side RootLayout
+ * never passes non-serialisable class instances (e.g. QueryClient).
+ */
+export default function Providers({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        {children}
+      </TooltipProvider>
+    </QueryClientProvider>
+  )
+}
+
+=== lib/queryClient.ts ===
+import { QueryClient } from "@tanstack/react-query"
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 1,
+    },
+  },
+})
+
+export async function apiRequest(method: string, url: string, data?: any): Promise<Response> {
+  const config: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  }
+
+  if (data) {
+    config.body = JSON.stringify(data)
+  }
+
+  const response = await fetch(url, config)
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+
+  return response
+}
+
+=== lib/schema.ts ===
+import { z } from "zod"
+
+export const insertUserSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+})
+
+export const insertConversationSchema = z.object({
+  title: z.string(),
+  userId: z.number().optional(),
+})
+
+export const insertMessageSchema = z.object({
+  conversationId: z.number(),
+  role: z.string(),
+  content: z.string(),
+  imageData: z.string().optional(), // Base64 encoded image data
+  imageMimeType: z.string().optional(), // MIME type like image/jpeg, image/png
+})
+
+export type InsertUser = z.infer<typeof insertUserSchema>
+export type User = {
+  id: number
+  username: string
+  password: string
+}
+
+export type InsertConversation = z.infer<typeof insertConversationSchema>
+export type Conversation = {
+  id: number
+  userId: number | null
+  title: string
+  createdAt: Date
+}
+
+export type InsertMessage = z.infer<typeof insertMessageSchema>
+export type Message = {
+  id: number
+  conversationId: number
+  role: string
+  content: string
+  imageData?: string | null
+  imageMimeType?: string | null
+  createdAt: Date
+}
+
+=== lib/utils.ts ===
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+=== lib/storage.ts ===
+import type { User, InsertUser, Conversation, InsertConversation, Message, InsertMessage } from "./schema"
+
+export interface IStorage {
+  getUser(id: number): Promise<User | undefined>
+  getUserByUsername(username: string): Promise<User | undefined>
+  createUser(user: InsertUser): Promise<User>
+
+  // Conversation methods
+  createConversation(conversation: InsertConversation): Promise<Conversation>
+  getConversation(id: number): Promise<Conversation | undefined>
+  getUserConversations(userId?: number): Promise<Conversation[]>
+
+  // Message methods
+  createMessage(message: InsertMessage): Promise<Message>
+  getConversationMessages(conversationId: number): Promise<Message[]>
+}
+
+export class MemStorage implements IStorage {
+  private users: Map<number, User>
+  private conversations: Map<number, Conversation>
+  private messages: Map<number, Message>
+  private currentUserId: number
+  private currentConversationId: number
+  private currentMessageId: number
+
+  constructor() {
+    this.users = new Map()
+    this.conversations = new Map()
+    this.messages = new Map()
+    this.currentUserId = 1
+    this.currentConversationId = 1
+    this.currentMessageId = 1
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    return this.users.get(id)
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find((user) => user.username === username)
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = this.currentUserId++
+    const user: User = { ...insertUser, id }
+    this.users.set(id, user)
+    return user
+  }
+
+  async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
+    const id = this.currentConversationId++
+    const conversation: Conversation = {
+      ...insertConversation,
+      userId: insertConversation.userId || null,
+      id,
+      createdAt: new Date(),
+    }
+    this.conversations.set(id, conversation)
+    return conversation
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    return this.conversations.get(id)
+  }
+
+  async getUserConversations(userId?: number): Promise<Conversation[]> {
+    return Array.from(this.conversations.values()).filter((conv) => !userId || conv.userId === userId)
+  }
+
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const id = this.currentMessageId++
+    const message: Message = {
+      ...insertMessage,
+      id,
+      createdAt: new Date(),
+    }
+    this.messages.set(id, message)
+    return message
+  }
+
+  async getConversationMessages(conversationId: number): Promise<Message[]> {
+    return Array.from(this.messages.values())
+      .filter((message) => message.conversationId === conversationId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  }
+}
+
+export const storage = new MemStorage()
+
+=== app/api/conversations/route.ts ===
+import { type NextRequest, NextResponse } from "next/server"
+import { storage } from "@/lib/storage"
+import { insertConversationSchema } from "@/lib/schema"
+
+export async function GET() {
+  try {
+    const conversations = await storage.getUserConversations()
+    return NextResponse.json(conversations)
+  } catch (error) {
+    console.error("Error fetching conversations:", error)
+    return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { title } = insertConversationSchema.parse(body)
+    const conversation = await storage.createConversation({ title, userId: undefined })
+    return NextResponse.json(conversation)
+  } catch (error) {
+    console.error("Error creating conversation:", error)
+    return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 })
+  }
+}
+
+=== app/api/conversations/[id]/messages/route.ts ===
+import { type NextRequest, NextResponse } from "next/server"
+import { storage } from "@/lib/storage"
+import { insertMessageSchema } from "@/lib/schema"
+import { generateChatResponse, generateStreamingChatResponse, generateConversationTitle } from "@/lib/gemini"
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const conversationId = Number.parseInt(params.id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
+    }
+
+    const messages = await storage.getConversationMessages(conversationId)
+    return NextResponse.json(messages)
+  } catch (error) {
+    console.error("Error fetching messages:", error)
+    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    console.log("POST /api/conversations/[id]/messages called")
+
+    const conversationId = Number.parseInt(params.id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    console.log("Request body:", body)
+
+    const { content, imageData, imageMimeType } = insertMessageSchema.omit({ conversationId: true, role: true }).parse(body)
+    console.log("Parsed content:", content)
+    console.log("Has image data:", !!imageData)
+
+    // Check if conversation exists
+    const conversation = await storage.getConversation(conversationId)
+    if (!conversation) {
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    }
+
+    // Save user message (with image data if present)
+    const userMessage = await storage.createMessage({
+      conversationId,
+      role: "user",
+      content,
+      imageData,
+      imageMimeType,
+    })
+    console.log("User message saved:", userMessage.id)
+
+    // Get conversation history for context
+    const messages = await storage.getConversationMessages(conversationId)
+    const chatHistory = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+      imageData: msg.imageData || undefined,
+      imageMimeType: msg.imageMimeType || undefined,
+    }))
+    console.log("Chat history length:", chatHistory.length)
+
+    // Generate AI response with context
+    const systemPrompt = `You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh.`
+
+    console.log("Calling generateChatResponse...")
+    const aiResponse = await generateChatResponse(chatHistory, systemPrompt)
+    console.log("AI response generated, length:", aiResponse.length)
+
+    // Save AI response
+    const assistantMessage = await storage.createMessage({
+      conversationId,
+      role: "assistant",
+      content: aiResponse,
+    })
+    console.log("Assistant message saved:", assistantMessage.id)
+
+    // If this is the first message, update the conversation title
+    if (messages.length === 1) {
+      try {
+        const title = await generateConversationTitle(content)
+        console.log("Generated title:", title)
+      } catch (error) {
+        console.error("Error generating title:", error)
+      }
+    }
+
+    const response = {
+      userMessage,
+      assistantMessage,
+    }
+
+    console.log("Returning response")
+    return NextResponse.json(response)
+  } catch (error) {
+    console.error("Error processing message - Full error:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace")
+
+    return NextResponse.json(
+      {
+        error: "Failed to process message",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+=== app/api/conversations/[id]/messages/stream/route.ts ===
+import { type NextRequest, NextResponse } from "next/server"
+import { storage } from "@/lib/storage"
+import { insertMessageSchema } from "@/lib/schema"
+import { generateChatResponse, generateConversationTitle } from "@/lib/gemini"
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    console.log("POST /api/conversations/[id]/messages/stream called")
+
+    const conversationId = Number.parseInt(params.id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    console.log("Request body:", body)
+
+    const { content, imageData, imageMimeType } = insertMessageSchema.omit({ conversationId: true, role: true }).parse(body)
+    console.log("Parsed content:", content)
+    console.log("Has image data:", !!imageData)
+
+    // Check if conversation exists
+    const conversation = await storage.getConversation(conversationId)
+    if (!conversation) {
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    }
+
+    // Save user message (with image data if present)
+    const userMessage = await storage.createMessage({
+      conversationId,
+      role: "user",
+      content,
+      imageData,
+      imageMimeType,
+    })
+    console.log("User message saved:", userMessage.id)
+
+    // Get conversation history for context
+    const messages = await storage.getConversationMessages(conversationId)
+    const chatHistory = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+      imageData: msg.imageData || undefined,
+      imageMimeType: msg.imageMimeType || undefined,
+    }))
+    console.log("Chat history length:", chatHistory.length)
+
+    // Generate AI response with context
+    const systemPrompt = `You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh.`
+
+    console.log("Generating AI response...")
+    
+    // Use regular API call instead of streaming for now (more reliable)
+    const aiResponse = await generateChatResponse(chatHistory, systemPrompt)
+    console.log("AI response generated, length:", aiResponse.length)
+
+    // Save AI response
+    const assistantMessage = await storage.createMessage({
+      conversationId,
+      role: "assistant",
+      content: aiResponse,
+    })
+    console.log("Assistant message saved:", assistantMessage.id)
+
+    // Create a simple streaming response that simulates typing
+    const encoder = new TextEncoder()
+    
+    const readableStream = new ReadableStream({
+      start(controller) {
+        // Send the user message immediately
+        const userMessageData = {
+          type: "user_message",
+          message: userMessage,
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(userMessageData)}\n\n`))
+        
+        // Start streaming the response character by character
+        let index = 0
+        const streamInterval = setInterval(() => {
+          if (index < aiResponse.length) {
+            const char = aiResponse[index]
+            const streamData = {
+              type: "stream_chunk",
+              chunk: char,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamData)}\n\n`))
+            index++
+          } else {
+            // Send the final complete message
+            const finalMessage = {
+              type: "assistant_message_complete",
+              message: assistantMessage,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalMessage)}\n\n`))
+            
+            clearInterval(streamInterval)
+            controller.close()
+          }
+        }, 20) // Stream characters every 20ms for smooth animation
+      },
+    })
+
+    // If this is the first message, update the conversation title
+    if (messages.length === 1) {
+      try {
+        const title = await generateConversationTitle(content)
+        console.log("Generated title:", title)
+      } catch (error) {
+        console.error("Error generating title:", error)
+      }
+    }
+
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    })
+  } catch (error) {
+    console.error("Error processing streaming message - Full error:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace")
+
+    return NextResponse.json(
+      {
+        error: "Failed to process streaming message",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
