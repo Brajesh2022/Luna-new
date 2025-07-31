@@ -1,0 +1,1663 @@
+# LUNA AI ASSISTANT - COMPLETE SOURCE CODE
+# ============================================
+
+This file contains all the essential code files for the Luna AI Assistant Next.js project.
+This is a complete AI chat application with image generation capabilities, built with:
+- Next.js 15 with App Router
+- TypeScript
+- Tailwind CSS
+- Framer Motion for animations
+- React Query for state management
+- Gemini AI API integration
+- Image generation using Pollinations.ai
+
+To recreate this project:
+1. Create a new Next.js project with TypeScript
+2. Install all dependencies from package.json
+3. Copy all files to their respective directories
+4. Set up your Gemini API keys in lib/gemini.ts
+5. Run npm install and npm run dev
+
+## PROJECT STRUCTURE:
+- app/ - Next.js App Router pages and API routes
+- components/ - React components (main app + UI components)
+- lib/ - Utility functions, API clients, and storage
+- hooks/ - Custom React hooks
+- public/ - Static assets
+
+## MAIN FILES:
+
+=== app/layout.tsx ===
+import type React from "react"
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import Providers from "@/components/providers"
+
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "Luna AI Assistant",
+  description: "Your intelligent AI assistant created by Brajesh",
+    generator: 'v0.dev'
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <Providers>{children}</Providers>
+      </body>
+    </html>
+  )
+}
+
+=== app/page.tsx ===
+import Home from "@/components/home"
+
+export default function Page() {
+  return <Home />
+}
+
+=== app/globals.css ===
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Custom viewport units for mobile */
+  --vh: 1vh;
+  --header-height: 70px;
+  --input-height: 80px;
+  /* Mobile keyboard handling */
+  --keyboard-height: 0px;
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 263 70% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 263 70% 90%;
+    --input: 263 70% 90%;
+    --ring: 263 70% 50%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 263 70% 50%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 263 70% 50%;
+  }
+}
+
+* {
+  @apply border-border;
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+  /* Prevent iOS zoom on input focus */
+  -webkit-text-size-adjust: 100%;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  /* Better mobile viewport handling */
+  height: -webkit-fill-available;
+}
+
+body {
+  @apply bg-background text-foreground;
+  height: 100vh;
+  height: 100dvh; 
+  height: -webkit-fill-available;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  position: fixed;
+  width: 100%;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Allow text selection only for chat content */
+.selectable {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Prevent text selection on buttons and interactive elements */
+button, .button, [role="button"] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent zoom on input focus (iOS) */
+input, textarea, select {
+  font-size: 16px;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Modern scrollbar for webkit browsers */
+.scrollbar-modern {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(168, 85, 247, 0.4) transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar-modern::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.5), rgba(147, 51, 234, 0.3));
+  border-radius: 12px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-modern::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(168, 85, 247, 0.8), rgba(147, 51, 234, 0.6));
+}
+
+/* Enhanced glass morphism effect */
+.glass-effect {
+  background: rgba(15, 15, 15, 0.4);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Layout improvements with original dark gradient */
+.app-container {
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, 
+    #581c87 0%,
+    #7c3aed 20%,
+    #3730a3 40%,
+    #1e40af 60%,
+    #1e293b 80%,
+    #0f172a 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Keyboard open state - prevent body scroll */
+body.keyboard-open {
+  position: fixed;
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-header {
+  height: var(--header-height);
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0 20px;
+  padding-top: env(safe-area-inset-top, 0px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  flex-shrink: 0;
+}
+
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: var(--input-height);
+  padding: 20px;
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  /* Remove scroll-behavior to prevent auto-scroll interference */
+  /* scroll-behavior: smooth; */
+  /* Smooth transitions for position changes */
+  transition: bottom 0.2s ease-out;
+}
+
+.app-input {
+  min-height: var(--input-height);
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px 20px;
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 1001;
+  flex-shrink: 0;
+  /* Allow smooth transitions for keyboard adjustments */
+  transition: bottom 0.2s ease-out;
+  /* Ensure it stays above viewport bottom on mobile */
+  min-height: env(safe-area-inset-bottom, 0px);
+}
+
+/* iOS specific fixes */
+@supports (-webkit-touch-callout: none) {
+  .app-input {
+    position: fixed;
+    bottom: env(safe-area-inset-bottom, 0px);
+    /* Additional iOS stability fixes */
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+}
+
+/* Messages spacing */
+.messages-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 20px;
+  min-height: 100%;
+  /* Remove scroll-behavior to prevent auto-scroll */
+  /* scroll-behavior: smooth; */
+  /* Prevent content from jumping during keyboard events */
+  contain: layout style paint;
+}
+
+/* Improved message styling */
+.message-bubble {
+  position: relative;
+  max-width: 85%;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  border-radius: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 16px 20px;
+}
+
+.message-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.user-message {
+  background: linear-gradient(135deg, 
+    rgba(139, 92, 246, 0.9) 0%, 
+    rgba(124, 58, 237, 0.8) 50%,
+    rgba(109, 40, 217, 0.9) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  margin-left: auto;
+  box-shadow: 
+    0 8px 25px rgba(139, 92, 246, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.assistant-message {
+  background: linear-gradient(135deg, 
+    rgba(0, 0, 0, 0.4) 0%, 
+    rgba(15, 15, 15, 0.5) 50%,
+    rgba(10, 10, 10, 0.4) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  margin-right: auto;
+  box-shadow: 
+    0 8px 25px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Enhanced markdown content */
+.markdown-content {
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 15px;
+}
+
+.markdown-content p {
+  margin: 0 0 12px 0;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 1);
+}
+
+.markdown-content em {
+  font-style: italic;
+  color: rgba(196, 181, 253, 0.9);
+}
+
+.markdown-content ul, .markdown-content ol {
+  margin: 8px 0 12px 20px;
+  padding-left: 0;
+}
+
+.markdown-content li {
+  margin-bottom: 4px;
+}
+
+.markdown-content a {
+  color: rgba(196, 181, 253, 0.9);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(196, 181, 253, 0.3);
+  transition: all 0.2s ease;
+}
+
+.markdown-content a:hover {
+  color: rgba(221, 214, 254, 1);
+  border-bottom-color: rgba(221, 214, 254, 0.6);
+}
+
+.markdown-content h1, .markdown-content h2, .markdown-content h3,
+.markdown-content h4, .markdown-content h5, .markdown-content h6 {
+  font-weight: 600;
+  margin: 16px 0 8px 0;
+  color: rgba(255, 255, 255, 1);
+}
+
+.markdown-content h1 { font-size: 24px; }
+.markdown-content h2 { font-size: 20px; }
+.markdown-content h3 { font-size: 18px; }
+
+.markdown-content code {
+  background: rgba(168, 85, 247, 0.15);
+  color: rgba(196, 181, 253, 0.95);
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+  font-size: 14px;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.markdown-content pre {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 16px;
+  border-radius: 12px;
+  overflow-x: auto;
+  margin: 12px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.markdown-content pre code {
+  background: transparent;
+  padding: 0;
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.markdown-content blockquote {
+  border-left: 3px solid rgba(168, 85, 247, 0.8);
+  padding: 12px 16px;
+  margin: 12px 0;
+  background: rgba(168, 85, 247, 0.05);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  color: rgba(196, 181, 253, 0.9);
+}
+
+/* Code block enhancement */
+.code-block {
+  margin: 16px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.code-block-header {
+  background: rgba(0, 0, 0, 0.8);
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.code-block-content {
+  background: rgba(0, 0, 0, 0.6);
+  padding: 0;
+}
+
+.code-block-content pre {
+  margin: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Copy button styling */
+.copy-button, .message-copy-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.copy-button:hover, .message-copy-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 1);
+  transform: translateY(-1px);
+}
+
+.message-copy-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  opacity: 0;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.message-bubble:hover .message-copy-button {
+  opacity: 1;
+}
+
+/* Futuristic UI elements */
+.glass-morphism {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* Message container for better spacing */
+.message-container {
+  max-width: 80%;
+  word-break: break-word;
+}
+
+/* User message styling */
+.user-message {
+  background: linear-gradient(135deg, rgba(147, 51, 234, 0.4) 0%, rgba(79, 70, 229, 0.4) 100%);
+  border: 1px solid rgba(147, 51, 234, 0.5);
+  box-shadow: 0 4px 15px rgba(147, 51, 234, 0.3);
+}
+
+/* Assistant message styling */
+.assistant-message {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.4) 0%, rgba(30, 30, 30, 0.4) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+/* Full screen modal override */
+.image-modal-overlay {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999 !important;
+}
+
+/* Mobile viewport fixes */
+@media (max-width: 640px) {
+  .message-container {
+    max-width: 85%;
+  }
+}
+
+/* Mobile improvements */
+@media (max-width: 768px) {
+  html {
+    /* Handle mobile browsers with dynamic viewport */
+    height: -webkit-fill-available;
+  }
+
+  body {
+    /* Better mobile viewport handling */
+    min-height: -webkit-fill-available;
+  }
+
+  .mobile-safe {
+    /* Add safe area padding for mobile devices */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .mobile-header {
+    /* Ensure header stays above mobile browsers */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .mobile-input {
+    /* Ensure input stays above mobile keyboards */
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .mobile-content {
+    /* Account for fixed header and input */
+    padding-top: calc(110px + env(safe-area-inset-top));
+    padding-bottom: calc(110px + env(safe-area-inset-bottom));
+    height: calc(100vh - 220px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Fix for mobile Chrome and other mobile browsers */
+@supports (-webkit-touch-callout: none) {
+  .h-screen {
+    height: -webkit-fill-available;
+  }
+}
+
+/* Ensure the app takes up the full height on mobile */
+html,
+body {
+  height: 100%;
+  position: fixed;
+  overflow: hidden;
+  width: 100%;
+}
+
+/* Improved scrolling for mobile */
+.overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent text selection on buttons */
+button {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+/* Prevent zoom on input focus on iOS */
+input,
+textarea {
+  font-size: 16px;
+}
+
+/* Shine effect animation */
+@keyframes shine {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.shine-effect {
+  background: linear-gradient(
+    90deg,
+    rgba(124, 58, 237, 0) 0%,
+    rgba(124, 58, 237, 0.4) 25%,
+    rgba(124, 58, 237, 0.6) 50%,
+    rgba(124, 58, 237, 0.4) 75%,
+    rgba(124, 58, 237, 0) 100%
+  );
+  background-size: 200% auto;
+  animation: shine 3s linear infinite;
+}
+
+/* Typing cursor animation */
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0;
+  }
+}
+
+.typing-cursor {
+  color: rgba(124, 58, 237, 0.8);
+  font-weight: 400;
+  animation: blink 1s infinite;
+  margin-left: 1px;
+  font-family: monospace;
+  font-size: 1em;
+  line-height: 1.6;
+  display: inline;
+}
+
+/* Animate the cursor character directly */
+.markdown-content p:last-child::after {
+  content: "";
+  animation: blink 1s infinite;
+}
+
+/* Image generation animation responsiveness */
+.image-generation-container {
+  width: 100%;
+  max-width: 100%;
+}
+
+.image-generation-container .grid {
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.image-generation-container .aspect-square {
+  width: 100%;
+  height: 100%;
+  min-height: 120px;
+}
+
+/* Streaming text styling */
+.streaming-text {
+  display: inline-block;
+  width: 100%;
+}
+
+.streaming-text > * {
+  display: inline;
+}
+
+.streaming-text p {
+  display: inline;
+  margin: 0;
+}
+
+.streaming-text p:not(:last-child)::after {
+  content: "\A";
+  white-space: pre;
+}
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  :root {
+    --header-height: 60px;
+    --input-height: 70px;
+  }
+
+  .app-header {
+    padding: 0 16px;
+    height: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+  }
+
+  .chat-container {
+    padding: 16px;
+    top: calc(var(--header-height) + env(safe-area-inset-top, 0px));
+    bottom: calc(var(--input-height) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-input {
+    padding: 12px 16px;
+    min-height: calc(var(--input-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .chat-input {
+    font-size: 16px; /* Prevent zoom */
+    padding: 12px 45px 12px 12px;
+  }
+
+  .message-bubble {
+    max-width: 90%;
+    padding: 12px 16px;
+  }
+
+  .suggestions-grid {
+    grid-template-columns: 1fr;
+    max-width: calc(100% - 32px);
+    margin: 0 auto;
+  }
+
+  .markdown-content {
+    font-size: 14px;
+  }
+
+  .avatar-wrapper {
+    width: 32px;
+    height: 32px;
+  }
+
+  .welcome-avatar {
+    width: 64px;
+    height: 64px;
+  }
+
+  .scroll-to-bottom {
+    bottom: calc(var(--input-height) + 16px + env(safe-area-inset-bottom, 0px));
+    right: 16px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-container {
+    padding: 12px;
+  }
+
+  .app-header {
+    padding: 0 12px;
+  }
+
+  .app-input {
+    padding: 10px 12px;
+  }
+
+  .messages-container {
+    gap: 16px;
+  }
+}
+
+/* Welcome screen */
+.welcome-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  /* Remove scroll-behavior to prevent auto-scroll */
+  /* scroll-behavior: smooth; */
+  /* Prevent content from jumping during keyboard events */
+  contain: layout style paint;
+}
+
+/* Mobile welcome screen adjustments */
+@media (max-width: 768px) {
+  .welcome-container {
+    padding: 20px 16px;
+    justify-content: flex-start;
+    padding-top: 60px;
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-container {
+    padding: 16px 12px;
+    padding-top: 40px;
+  }
+}
+
+.welcome-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.8), rgba(124, 58, 237, 0.6));
+  padding: 3px;
+  margin-bottom: 24px;
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.3);
+}
+
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+  max-width: 600px;
+  width: 100%;
+  margin-top: 32px;
+}
+
+/* Mobile responsive suggestions */
+@media (max-width: 768px) {
+  .suggestions-grid {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+    gap: 8px;
+    margin-top: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .suggestions-grid {
+    grid-template-columns: 1fr;
+    max-width: calc(100% - 32px);
+    gap: 8px;
+    margin-top: 20px;
+  }
+}
+
+.suggestion-card {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 16px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Mobile suggestion card adjustments */
+@media (max-width: 768px) {
+  .suggestion-card {
+    padding: 12px;
+    border-radius: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .suggestion-card {
+    padding: 10px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+}
+
+.suggestion-card:hover {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(139, 92, 246, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.2);
+}
+
+/* Performance optimizations */
+.message-bubble {
+  contain: layout style paint;
+}
+
+.chat-container {
+  contain: layout;
+}
+
+/* Input styling */
+.chat-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 14px 50px 14px 16px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 16px; /* Prevent zoom on iOS */
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: all 0.3s ease;
+  min-height: 48px;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Prevent input bouncing */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Additional stability for mobile */
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  z-index: 1;
+}
+
+.chat-input::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-input::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.chat-input:focus {
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Button styling */
+.send-button {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.9), rgba(124, 58, 237, 0.8));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  color: white;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  min-width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 1), rgba(124, 58, 237, 0.9));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+.send-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Scroll to bottom button */
+.scroll-to-bottom {
+  position: fixed;
+  bottom: calc(var(--input-height) + 20px + var(--safe-area-inset-bottom));
+  right: 20px;
+  z-index: 500;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.9), rgba(124, 58, 237, 0.8));
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.scroll-to-bottom:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+}
+
+/* Avatar styling */
+.avatar-wrapper {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.8), rgba(124, 58, 237, 0.6));
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Loading animation */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.6);
+  animation: typing-bounce 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes typing-bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Image preview styling */
+.image-preview {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+.image-preview img {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 2px solid rgba(139, 92, 246, 0.4);
+}
+
+.remove-image {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.9);
+  border: 2px solid white;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.remove-image:hover {
+  background: rgba(220, 38, 38, 1);
+  transform: scale(1.1);
+}
+
+/* Focus styles for accessibility */
+.chat-input:focus,
+.send-button:focus,
+.suggestion-card:focus {
+  outline: 2px solid rgba(139, 92, 246, 0.5);
+  outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .glass-effect {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.3);
+  }
+  
+  .user-message, .assistant-message {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+=== components/providers.tsx ===
+"use client"
+
+import { QueryClientProvider } from "@tanstack/react-query"
+import { queryClient } from "@/lib/queryClient"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { Toaster } from "@/components/ui/toaster"
+import type { ReactNode } from "react"
+
+/**
+ * Groups all client-only providers so the server-side RootLayout
+ * never passes non-serialisable class instances (e.g. QueryClient).
+ */
+export default function Providers({ children }: { children: ReactNode }) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        {children}
+      </TooltipProvider>
+    </QueryClientProvider>
+  )
+}
+
+=== lib/queryClient.ts ===
+import { QueryClient } from "@tanstack/react-query"
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 5, // 5 minutes
+      retry: 1,
+    },
+  },
+})
+
+export async function apiRequest(method: string, url: string, data?: any): Promise<Response> {
+  const config: RequestInit = {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  }
+
+  if (data) {
+    config.body = JSON.stringify(data)
+  }
+
+  const response = await fetch(url, config)
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+
+  return response
+}
+
+=== lib/schema.ts ===
+import { z } from "zod"
+
+export const insertUserSchema = z.object({
+  username: z.string(),
+  password: z.string(),
+})
+
+export const insertConversationSchema = z.object({
+  title: z.string(),
+  userId: z.number().optional(),
+})
+
+export const insertMessageSchema = z.object({
+  conversationId: z.number(),
+  role: z.string(),
+  content: z.string(),
+  imageData: z.string().optional(), // Base64 encoded image data
+  imageMimeType: z.string().optional(), // MIME type like image/jpeg, image/png
+})
+
+export type InsertUser = z.infer<typeof insertUserSchema>
+export type User = {
+  id: number
+  username: string
+  password: string
+}
+
+export type InsertConversation = z.infer<typeof insertConversationSchema>
+export type Conversation = {
+  id: number
+  userId: number | null
+  title: string
+  createdAt: Date
+}
+
+export type InsertMessage = z.infer<typeof insertMessageSchema>
+export type Message = {
+  id: number
+  conversationId: number
+  role: string
+  content: string
+  imageData?: string | null
+  imageMimeType?: string | null
+  createdAt: Date
+}
+
+=== lib/utils.ts ===
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+
+=== lib/storage.ts ===
+import type { User, InsertUser, Conversation, InsertConversation, Message, InsertMessage } from "./schema"
+
+export interface IStorage {
+  getUser(id: number): Promise<User | undefined>
+  getUserByUsername(username: string): Promise<User | undefined>
+  createUser(user: InsertUser): Promise<User>
+
+  // Conversation methods
+  createConversation(conversation: InsertConversation): Promise<Conversation>
+  getConversation(id: number): Promise<Conversation | undefined>
+  getUserConversations(userId?: number): Promise<Conversation[]>
+
+  // Message methods
+  createMessage(message: InsertMessage): Promise<Message>
+  getConversationMessages(conversationId: number): Promise<Message[]>
+}
+
+export class MemStorage implements IStorage {
+  private users: Map<number, User>
+  private conversations: Map<number, Conversation>
+  private messages: Map<number, Message>
+  private currentUserId: number
+  private currentConversationId: number
+  private currentMessageId: number
+
+  constructor() {
+    this.users = new Map()
+    this.conversations = new Map()
+    this.messages = new Map()
+    this.currentUserId = 1
+    this.currentConversationId = 1
+    this.currentMessageId = 1
+  }
+
+  async getUser(id: number): Promise<User | undefined> {
+    return this.users.get(id)
+  }
+
+  async getUserByUsername(username: string): Promise<User | undefined> {
+    return Array.from(this.users.values()).find((user) => user.username === username)
+  }
+
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const id = this.currentUserId++
+    const user: User = { ...insertUser, id }
+    this.users.set(id, user)
+    return user
+  }
+
+  async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
+    const id = this.currentConversationId++
+    const conversation: Conversation = {
+      ...insertConversation,
+      userId: insertConversation.userId || null,
+      id,
+      createdAt: new Date(),
+    }
+    this.conversations.set(id, conversation)
+    return conversation
+  }
+
+  async getConversation(id: number): Promise<Conversation | undefined> {
+    return this.conversations.get(id)
+  }
+
+  async getUserConversations(userId?: number): Promise<Conversation[]> {
+    return Array.from(this.conversations.values()).filter((conv) => !userId || conv.userId === userId)
+  }
+
+  async createMessage(insertMessage: InsertMessage): Promise<Message> {
+    const id = this.currentMessageId++
+    const message: Message = {
+      ...insertMessage,
+      id,
+      createdAt: new Date(),
+    }
+    this.messages.set(id, message)
+    return message
+  }
+
+  async getConversationMessages(conversationId: number): Promise<Message[]> {
+    return Array.from(this.messages.values())
+      .filter((message) => message.conversationId === conversationId)
+      .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+  }
+}
+
+export const storage = new MemStorage()
+
+=== app/api/conversations/route.ts ===
+import { type NextRequest, NextResponse } from "next/server"
+import { storage } from "@/lib/storage"
+import { insertConversationSchema } from "@/lib/schema"
+
+export async function GET() {
+  try {
+    const conversations = await storage.getUserConversations()
+    return NextResponse.json(conversations)
+  } catch (error) {
+    console.error("Error fetching conversations:", error)
+    return NextResponse.json({ error: "Failed to fetch conversations" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const { title } = insertConversationSchema.parse(body)
+    const conversation = await storage.createConversation({ title, userId: undefined })
+    return NextResponse.json(conversation)
+  } catch (error) {
+    console.error("Error creating conversation:", error)
+    return NextResponse.json({ error: "Failed to create conversation" }, { status: 500 })
+  }
+}
+
+=== app/api/conversations/[id]/messages/route.ts ===
+import { type NextRequest, NextResponse } from "next/server"
+import { storage } from "@/lib/storage"
+import { insertMessageSchema } from "@/lib/schema"
+import { generateChatResponse, generateStreamingChatResponse, generateConversationTitle } from "@/lib/gemini"
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const conversationId = Number.parseInt(params.id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
+    }
+
+    const messages = await storage.getConversationMessages(conversationId)
+    return NextResponse.json(messages)
+  } catch (error) {
+    console.error("Error fetching messages:", error)
+    return NextResponse.json({ error: "Failed to fetch messages" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    console.log("POST /api/conversations/[id]/messages called")
+
+    const conversationId = Number.parseInt(params.id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    console.log("Request body:", body)
+
+    const { content, imageData, imageMimeType } = insertMessageSchema.omit({ conversationId: true, role: true }).parse(body)
+    console.log("Parsed content:", content)
+    console.log("Has image data:", !!imageData)
+
+    // Check if conversation exists
+    const conversation = await storage.getConversation(conversationId)
+    if (!conversation) {
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    }
+
+    // Save user message (with image data if present)
+    const userMessage = await storage.createMessage({
+      conversationId,
+      role: "user",
+      content,
+      imageData,
+      imageMimeType,
+    })
+    console.log("User message saved:", userMessage.id)
+
+    // Get conversation history for context
+    const messages = await storage.getConversationMessages(conversationId)
+    const chatHistory = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+      imageData: msg.imageData || undefined,
+      imageMimeType: msg.imageMimeType || undefined,
+    }))
+    console.log("Chat history length:", chatHistory.length)
+
+    // Generate AI response with context
+    const systemPrompt = `You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh.`
+
+    console.log("Calling generateChatResponse...")
+    const aiResponse = await generateChatResponse(chatHistory, systemPrompt)
+    console.log("AI response generated, length:", aiResponse.length)
+
+    // Save AI response
+    const assistantMessage = await storage.createMessage({
+      conversationId,
+      role: "assistant",
+      content: aiResponse,
+    })
+    console.log("Assistant message saved:", assistantMessage.id)
+
+    // If this is the first message, update the conversation title
+    if (messages.length === 1) {
+      try {
+        const title = await generateConversationTitle(content)
+        console.log("Generated title:", title)
+      } catch (error) {
+        console.error("Error generating title:", error)
+      }
+    }
+
+    const response = {
+      userMessage,
+      assistantMessage,
+    }
+
+    console.log("Returning response")
+    return NextResponse.json(response)
+  } catch (error) {
+    console.error("Error processing message - Full error:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace")
+
+    return NextResponse.json(
+      {
+        error: "Failed to process message",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+=== app/api/conversations/[id]/messages/stream/route.ts ===
+import { type NextRequest, NextResponse } from "next/server"
+import { storage } from "@/lib/storage"
+import { insertMessageSchema } from "@/lib/schema"
+import { generateChatResponse, generateConversationTitle } from "@/lib/gemini"
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    console.log("POST /api/conversations/[id]/messages/stream called")
+
+    const conversationId = Number.parseInt(params.id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: "Invalid conversation ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    console.log("Request body:", body)
+
+    const { content, imageData, imageMimeType } = insertMessageSchema.omit({ conversationId: true, role: true }).parse(body)
+    console.log("Parsed content:", content)
+    console.log("Has image data:", !!imageData)
+
+    // Check if conversation exists
+    const conversation = await storage.getConversation(conversationId)
+    if (!conversation) {
+      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    }
+
+    // Save user message (with image data if present)
+    const userMessage = await storage.createMessage({
+      conversationId,
+      role: "user",
+      content,
+      imageData,
+      imageMimeType,
+    })
+    console.log("User message saved:", userMessage.id)
+
+    // Get conversation history for context
+    const messages = await storage.getConversationMessages(conversationId)
+    const chatHistory = messages.map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content,
+      imageData: msg.imageData || undefined,
+      imageMimeType: msg.imageMimeType || undefined,
+    }))
+    console.log("Chat history length:", chatHistory.length)
+
+    // Generate AI response with context
+    const systemPrompt = `You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh.`
+
+    console.log("Generating AI response...")
+    
+    // Use regular API call instead of streaming for now (more reliable)
+    const aiResponse = await generateChatResponse(chatHistory, systemPrompt)
+    console.log("AI response generated, length:", aiResponse.length)
+
+    // Save AI response
+    const assistantMessage = await storage.createMessage({
+      conversationId,
+      role: "assistant",
+      content: aiResponse,
+    })
+    console.log("Assistant message saved:", assistantMessage.id)
+
+    // Create a simple streaming response that simulates typing
+    const encoder = new TextEncoder()
+    
+    const readableStream = new ReadableStream({
+      start(controller) {
+        // Send the user message immediately
+        const userMessageData = {
+          type: "user_message",
+          message: userMessage,
+        }
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(userMessageData)}\n\n`))
+        
+        // Start streaming the response character by character
+        let index = 0
+        const streamInterval = setInterval(() => {
+          if (index < aiResponse.length) {
+            const char = aiResponse[index]
+            const streamData = {
+              type: "stream_chunk",
+              chunk: char,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(streamData)}\n\n`))
+            index++
+          } else {
+            // Send the final complete message
+            const finalMessage = {
+              type: "assistant_message_complete",
+              message: assistantMessage,
+            }
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(finalMessage)}\n\n`))
+            
+            clearInterval(streamInterval)
+            controller.close()
+          }
+        }, 20) // Stream characters every 20ms for smooth animation
+      },
+    })
+
+    // If this is the first message, update the conversation title
+    if (messages.length === 1) {
+      try {
+        const title = await generateConversationTitle(content)
+        console.log("Generated title:", title)
+      } catch (error) {
+        console.error("Error generating title:", error)
+      }
+    }
+
+    return new Response(readableStream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    })
+  } catch (error) {
+    console.error("Error processing streaming message - Full error:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace")
+
+    return NextResponse.json(
+      {
+        error: "Failed to process streaming message",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}

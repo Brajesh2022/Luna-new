@@ -1,0 +1,1047 @@
+=== lib/gemini.ts ===
+// Multiple API keys for automatic fallback
+const GOOGLE_API_KEYS = [
+  "AIzaSyAOoY7jmqopJ5q34ELVyNViSPEtQ8WUDw0", // Original key
+  "AIzaSyArRtMxtNBzbUyzWn09HuYbPkCag59qfjU", // Fallback 1
+  "AIzaSyCDrjSPNGlOzVIBJdVDcMjMVePe7es4UwY", // Fallback 2
+  "AIzaSyAVhqmKXcEdP7q2W-0-mCKaSL1w3KLyKZY", // Fallback 3
+]
+
+export interface ChatMessage {
+  role: "user" | "assistant" | "system"
+  content: string
+  imageData?: string // Base64 encoded image data
+  imageMimeType?: string // MIME type like image/jpeg, image/png
+}
+
+// Helper function to determine if error is retryable with different API key
+const isRetryableError = (error: any): boolean => {
+  if (typeof error === 'string') {
+    return error.includes('quota') || 
+           error.includes('rate') || 
+           error.includes('limit') ||
+           error.includes('429') ||
+           error.includes('503') ||
+           error.includes('502') ||
+           error.includes('500')
+  }
+  
+  if (error instanceof Error) {
+    return error.message.includes('quota') || 
+           error.message.includes('rate') || 
+           error.message.includes('limit') ||
+           error.message.includes('429') ||
+           error.message.includes('503') ||
+           error.message.includes('502') ||
+           error.message.includes('500')
+  }
+  
+  return false
+}
+
+// Helper function to make API request with fallback
+async function makeGeminiRequest(
+  endpoint: string,
+  requestBody: any,
+  isStreaming: boolean = false
+): Promise<Response> {
+  let lastError: any = null
+  
+  for (let i = 0; i < GOOGLE_API_KEYS.length; i++) {
+    const apiKey = GOOGLE_API_KEYS[i]
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:${endpoint}?key=${apiKey}`
+    
+    try {
+      console.log(`Trying API key ${i + 1}/${GOOGLE_API_KEYS.length} for ${endpoint}`)
+      
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (response.ok) {
+        console.log(`✅ Successfully used API key ${i + 1}`)
+        return response
+      }
+
+      const errorText = await response.text()
+      const error = `API key ${i + 1} failed: ${response.status} - ${errorText}`
+      console.warn(error)
+      lastError = error
+      
+      // If it's a retryable error and we have more keys, try next one
+      if (isRetryableError(errorText) && i < GOOGLE_API_KEYS.length - 1) {
+        console.log(`⚠️ Retryable error with API key ${i + 1}, trying next key...`)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay
+        continue
+      }
+      
+      // If it's not retryable, throw immediately
+      if (!isRetryableError(errorText)) {
+        throw new Error(error)
+      }
+      
+    } catch (fetchError) {
+      const error = `API key ${i + 1} request failed: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`
+      console.warn(error)
+      lastError = error
+      
+      // If it's a retryable error and we have more keys, try next one
+      if (isRetryableError(fetchError) && i < GOOGLE_API_KEYS.length - 1) {
+        console.log(`⚠️ Retryable error with API key ${i + 1}, trying next key...`)
+        await new Promise(resolve => setTimeout(resolve, 500)) // Brief delay
+        continue
+      }
+      
+      // If it's not retryable, throw immediately
+      if (!isRetryableError(fetchError)) {
+        throw new Error(error)
+      }
+    }
+  }
+  
+  // If we get here, all API keys failed
+  throw new Error(`All ${GOOGLE_API_KEYS.length} API keys failed. Last error: ${lastError}`)
+}
+
+export async function generateChatResponse(messages: ChatMessage[], systemPrompt?: string): Promise<string> {
+  try {
+    console.log("🚀 generateChatResponse called")
+    console.log("Messages:", messages.length)
+    console.log("System prompt:", systemPrompt ? "provided" : "default")
+
+    // Convert messages to Gemini format
+    const geminiMessages = messages.map((msg) => {
+      const parts: any[] = [{ text: msg.content }]
+      
+      // Add image data if present
+      if (msg.imageData && msg.imageMimeType) {
+        console.log("📸 Image data found, type:", msg.imageMimeType)
+        parts.push({
+          inline_data: {
+            mime_type: msg.imageMimeType,
+            data: msg.imageData
+          }
+        })
+      }
+      
+      return {
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: parts
+      }
+    })
+
+    console.log("📝 Gemini messages prepared:", geminiMessages.length)
+
+    const enhancedSystemPrompt = `${systemPrompt || "You are Luna, a professional AI assistant created by Brajesh. You are helpful, knowledgeable, and provide detailed responses. Always maintain context from previous messages in the conversation and provide thoughtful, well-structured answers. If asked about your creator, mention that you were made by Brajesh."}
+
+IMPORTANT IMAGE GENERATION INSTRUCTIONS:
+When a user asks you to generate, create, make, or produce images, photos, pictures, or any visual content, you MUST respond with a JSON object containing exactly 4 image prompts. Follow this exact format:
+
+{
+  "type": "image_generation",
+  "prompts": [
+    "detailed prompt 1",
+    "detailed prompt 2", 
+    "detailed prompt 3",
+    "detailed prompt 4"
+  ]
+}
+
+Create 4 diverse, detailed prompts based on the user's request. Each prompt should be specific, descriptive, and optimized for image generation. Include artistic styles, lighting, composition details, and visual elements that would create high-quality, varied images.
+
+CRITICAL: For image generation requests, respond ONLY with the raw JSON object. Do NOT wrap it in markdown code blocks, backticks, or any other formatting. Do NOT include any other text, explanations, or commentary - just the plain JSON object.
+
+IMAGE UNDERSTANDING:
+When users send images, carefully analyze the image content and provide detailed, accurate descriptions and answers about what you see. Reference specific elements, colors, objects, text, and other visual details in your response.`
+
+    const requestBody = {
+      contents: geminiMessages,
+      systemInstruction: {
+        parts: [{ text: enhancedSystemPrompt }],
+      },
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1000,
+      },
+    }
+
+    console.log("📡 Making request with API key fallback...")
+    const response = await makeGeminiRequest("generateContent", requestBody, false)
+    console.log("✅ Response received, status:", response.status)
+
+    const data = await response.json()
+    console.log("📊 Response data structure:", {
+      hasCandidates: !!data.candidates,
+      candidatesLength: data.candidates?.length,
+      hasContent: !!data.candidates?.[0]?.content,
+      hasParts: !!data.candidates?.[0]?.content?.parts,
+      partsLength: data.candidates?.[0]?.content?.parts?.length,
+    })
+
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.error("❌ Invalid response structure:", data)
+      throw new Error("Invalid response from Gemini API")
+    }
+
+    let responseText =
+      data.candidates[0].content.parts[0].text || "I apologize, but I couldn't generate a response. Please try again."
+
+    // Clean up JSON response if it's wrapped in markdown code blocks
+    if (responseText.includes("```json")) {
+      console.log("🧹 Cleaning up JSON response")
+      responseText = responseText
+        .replace(/```json\s*/g, "")
+        .replace(/```\s*/g, "")
+        .trim()
+    }
+
+    console.log("📝 Final response length:", responseText.length)
+    console.log("📝 First 100 chars:", responseText.substring(0, 100))
+
+    return responseText
+  } catch (error) {
+    console.error("❌ Gemini API error details:", error)
+    console.error("❌ Error message:", error instanceof Error ? error.message : String(error))
+    console.error("❌ Error stack:", error instanceof Error ? error.stack : "No stack")
+
+    throw new Error(`Failed to generate AI response: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+export async function generateConversationTitle(firstMessage: string): Promise<string> {
+  try {
+    const requestBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Generate a brief, descriptive title (max 5 words) for a conversation that starts with the following message. Respond only with the title, no quotes or extra text: "${firstMessage}"`,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.5,
+        maxOutputTokens: 20,
+      },
+    }
+
+    console.log("Generating conversation title with API key fallback...")
+    const response = await makeGeminiRequest("generateContent", requestBody, false)
+
+    const data = await response.json()
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "New Conversation"
+  } catch (error) {
+    console.error("Error generating conversation title:", error)
+    return "New Conversation"
+  }
+}
+
+=== components/image-collage.tsx ===
+"use client"
+
+import { useState, useEffect } from "react"
+import { Download, Loader2, Expand } from "lucide-react"
+import ImageModal from "./image-modal"
+
+interface ImageCollageProps {
+  prompts: string[]
+  messageId?: number
+}
+
+interface ImageStatus {
+  url: string
+  loaded: boolean
+  error: boolean
+  prompt: string
+}
+
+export default function ImageCollage({ prompts, messageId }: ImageCollageProps) {
+  const [images, setImages] = useState<ImageStatus[]>([])
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedImage, setSelectedImage] = useState<ImageStatus | null>(null)
+
+  useEffect(() => {
+    // Only update if messageId changes or if this is the first time
+    const imageStatuses = prompts.map((prompt) => ({
+      url: `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`,
+      loaded: false,
+      error: false,
+      prompt: prompt,
+    }))
+    setImages(imageStatuses)
+  }, [messageId]) // Only depend on messageId, not prompts
+
+  const handleImageLoad = (index: number) => {
+    setImages((prev) => prev.map((img, i) => (i === index ? { ...img, loaded: true } : img)))
+  }
+
+  const handleImageError = (index: number) => {
+    setImages((prev) => prev.map((img, i) => (i === index ? { ...img, error: true, loaded: true } : img)))
+  }
+
+  const downloadImage = async (url: string, index: number) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = `luna-ai-image-${index + 1}.jpg`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error("Download failed:", error)
+    }
+  }
+
+  const handleImageClick = (image: ImageStatus) => {
+    setSelectedImage(image)
+    setModalOpen(true)
+  }
+
+  return (
+    <div className="relative space-y-3">
+      <div className="text-white/70 text-sm mb-3">Generated 4 image variations for you:</div>
+
+      <div className="grid grid-cols-2 gap-3 w-full">
+        {images.map((image, index) => (
+          <div
+            key={`${messageId}-${index}`}
+            className="relative aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-purple-700/20 border border-purple-500/20 group cursor-pointer"
+            onClick={() => handleImageClick(image)}
+          >
+            {!image.loaded && !image.error && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-2">
+                  <Loader2 className="h-6 w-6 text-purple-400 animate-spin mx-auto" />
+                  <p className="text-white/60 text-xs">Generating...</p>
+                </div>
+              </div>
+            )}
+
+            {image.error && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center space-y-2">
+                  <div className="text-red-400 text-xs">Failed to load</div>
+                </div>
+              </div>
+            )}
+
+            <img
+              src={image.url || "/placeholder.svg"}
+              alt={`Generated image ${index + 1}`}
+              onLoad={() => handleImageLoad(index)}
+              onError={() => handleImageError(index)}
+              className={`w-full h-full object-cover transition-opacity duration-300 ${
+                image.loaded && !image.error ? "opacity-100" : "opacity-0"
+              }`}
+            />
+
+            {image.loaded && !image.error && (
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity flex space-x-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleImageClick(image)
+                  }}
+                  className="p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
+                  title="View larger"
+                >
+                  <Expand className="h-3 w-3 text-white" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    downloadImage(image.url, index)
+                  }}
+                  className="p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
+                  title="Download image"
+                >
+                  <Download className="h-3 w-3 text-white" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="text-white/50 text-xs mt-2">
+        Click any image to view it larger. Use the download button to save images.
+      </div>
+
+      {/* Full-Screen Image Modal */}
+      {selectedImage && (
+        <ImageModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          imageUrl={selectedImage.url}
+          prompt={selectedImage.prompt}
+        />
+      )}
+    </div>
+  )
+}
+
+=== components/image-modal.tsx ===
+"use client"
+
+import { useState, useEffect } from "react"
+import { X, Download, Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { motion, AnimatePresence } from "framer-motion"
+
+interface ImageModalProps {
+  isOpen: boolean
+  onClose: () => void
+  imageUrl: string
+  prompt: string
+}
+
+export default function ImageModal({ isOpen, onClose, imageUrl, prompt }: ImageModalProps) {
+  const [displayImageUrl, setDisplayImageUrl] = useState<string | null>(null)
+  const [imageLoading, setImageLoading] = useState(true)
+
+  // Function to generate watermarked image
+  const generateWatermarkedImage = async (originalUrl: string, textPrompt: string) => {
+    setImageLoading(true)
+    setDisplayImageUrl(null) // Clear previous image
+
+    try {
+      const response = await fetch(originalUrl)
+      const blob = await response.blob()
+
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")
+      const img = new Image()
+      img.crossOrigin = "anonymous" // CRITICAL for CORS issues when drawing external images to canvas
+
+      img.onload = () => {
+        canvas.width = img.width
+        canvas.height = img.height
+        ctx!.drawImage(img, 0, 0)
+
+        const watermarkText = "Made with LUNA AI"
+        const fontSize = Math.max(24, img.width * 0.03)
+        ctx!.font = `bold ${fontSize}px Arial`
+
+        const padding = 30
+        const textWidth = ctx!.measureText(watermarkText).width
+        const x = canvas.width - textWidth - padding
+        const y = canvas.height - padding
+
+        const bgPadding = 12
+        const bgWidth = textWidth + bgPadding * 2
+        const bgHeight = fontSize + bgPadding * 1.5
+
+        const gradient = ctx!.createLinearGradient(
+          x - bgPadding,
+          y - bgHeight + bgPadding,
+          x + textWidth + bgPadding,
+          y + bgPadding,
+        )
+        gradient.addColorStop(0, "rgba(147, 51, 234, 0.9)")
+        gradient.addColorStop(1, "rgba(79, 70, 229, 0.9)")
+
+        ctx!.fillStyle = gradient
+        ctx!.fillRect(x - bgPadding, y - bgHeight + bgPadding, bgWidth, bgHeight)
+
+        ctx!.fillStyle = "rgba(255, 255, 255, 0.95)"
+        ctx!.strokeStyle = "rgba(0, 0, 0, 0.3)"
+        ctx!.lineWidth = 1
+        ctx!.strokeText(watermarkText, x, y)
+        ctx!.fillText(watermarkText, x, y)
+
+        canvas.toBlob(
+          (watermarkedBlob) => {
+            if (watermarkedBlob) {
+              const url = window.URL.createObjectURL(watermarkedBlob)
+              setDisplayImageUrl(url)
+              setImageLoading(false)
+            }
+          },
+          "image/jpeg",
+          0.95,
+        )
+      }
+      img.onerror = () => {
+        console.error("Error loading image for watermark:", originalUrl)
+        setDisplayImageUrl(originalUrl) // Fallback to original if watermark fails
+        setImageLoading(false)
+      }
+      img.src = URL.createObjectURL(blob)
+    } catch (error) {
+      console.error("Error generating watermarked image:", error)
+      setDisplayImageUrl(originalUrl) // Fallback to original on error
+      setImageLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (isOpen && imageUrl) {
+      generateWatermarkedImage(imageUrl, prompt)
+    } else {
+      // Clean up object URL when modal closes or image changes
+      if (displayImageUrl) {
+        URL.revokeObjectURL(displayImageUrl)
+        setDisplayImageUrl(null)
+      }
+    }
+  }, [isOpen, imageUrl, prompt]) // Re-run when isOpen, imageUrl, or prompt changes
+
+  const handleDownload = async () => {
+    if (displayImageUrl) {
+      try {
+        const response = await fetch(displayImageUrl)
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `luna-ai-${prompt.substring(0, 20)}.jpg`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } catch (error) {
+        console.error("Download failed:", error)
+      }
+    }
+  }
+
+  if (!isOpen) return null
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center"
+      >
+        <div className="relative max-w-full max-h-full flex items-center justify-center">
+          {imageLoading && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+            </div>
+          )}
+          {displayImageUrl && (
+            <img
+              src={displayImageUrl || "/placeholder.svg"}
+              alt="Generated"
+              className={`max-w-full max-h-full ${imageLoading ? "opacity-0" : "opacity-100"}`}
+              onLoad={() => setImageLoading(false)} // This might not be needed if generateWatermarkedImage handles it
+              onError={() => {
+                console.error("Error displaying watermarked image in modal.")
+                setImageLoading(false)
+              }}
+            />
+          )}
+          <Button variant="outline" className="absolute top-4 right-4 bg-transparent" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" className="absolute bottom-4 right-4 bg-transparent" onClick={handleDownload}>
+            <Download className="h-4 w-4" />
+          </Button>
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+=== components/image-generation-animation.tsx ===
+import React, { useEffect, useState } from "react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Palette, Sparkles, Wand2, Stars, Zap, Brush } from "lucide-react"
+
+interface ImageGenerationAnimationProps {
+  isVisible: boolean
+}
+
+const ImageGenerationAnimation: React.FC<ImageGenerationAnimationProps> = ({ isVisible }) => {
+  const [currentPhase, setCurrentPhase] = useState(0)
+  const [particles, setParticles] = useState<Array<{ id: number; x: number; y: number; delay: number }>>([])
+
+  const phases = [
+    { icon: Sparkles, text: "Igniting creativity...", color: "from-purple-400 to-pink-400" },
+    { icon: Palette, text: "Mixing colors...", color: "from-blue-400 to-purple-400" },
+    { icon: Brush, text: "Painting masterpiece...", color: "from-green-400 to-blue-400" },
+    { icon: Wand2, text: "Adding magic...", color: "from-yellow-400 to-orange-400" },
+    { icon: Stars, text: "Finalizing creation...", color: "from-pink-400 to-purple-400" },
+  ]
+
+  useEffect(() => {
+    if (!isVisible) return
+
+    // Generate particles (5 per grid item)
+    const newParticles = Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      x: Math.random() * 100,
+      y: Math.random() * 100,
+      delay: Math.random() * 2,
+    }))
+    setParticles(newParticles)
+
+    // Cycle through phases
+    const interval = setInterval(() => {
+      setCurrentPhase((prev) => (prev + 1) % phases.length)
+    }, 1500)
+
+    return () => clearInterval(interval)
+  }, [isVisible, phases.length])
+
+  if (!isVisible) return null
+
+  const currentPhaseData = phases[currentPhase]
+  const Icon = currentPhaseData.icon
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.8 }}
+        className="relative space-y-3 w-full image-generation-container"
+      >
+        {/* Header to match image collage */}
+        <div className="text-white/70 text-sm mb-3">Creating 4 image variations for you:</div>
+
+        {/* Main animation container matching image collage grid */}
+        <div className="grid grid-cols-2 gap-3 w-full">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div
+              key={index}
+              className="relative aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-purple-700/20 border border-purple-500/20"
+            >
+              {/* Animated Background Gradient */}
+              <motion.div
+                className="absolute inset-0 opacity-30"
+                animate={{
+                  background: [
+                    "radial-gradient(circle at 20% 50%, #8b5cf6 0%, transparent 50%)",
+                    "radial-gradient(circle at 80% 50%, #06b6d4 0%, transparent 50%)",
+                    "radial-gradient(circle at 50% 20%, #f59e0b 0%, transparent 50%)",
+                    "radial-gradient(circle at 50% 80%, #ec4899 0%, transparent 50%)",
+                    "radial-gradient(circle at 20% 50%, #8b5cf6 0%, transparent 50%)",
+                  ],
+                }}
+                transition={{
+                  duration: 4,
+                  repeat: Infinity,
+                  ease: "linear",
+                  delay: index * 0.5,
+                }}
+              />
+
+              {/* Floating Particles */}
+              {particles.slice(index * 5, (index + 1) * 5).map((particle, particleIndex) => (
+                <motion.div
+                  key={`${index}-${particleIndex}`}
+                  className="absolute w-1 h-1 bg-white/40 rounded-full"
+                  initial={{ 
+                    left: `${particle.x}%`, 
+                    top: `${particle.y}%`,
+                    opacity: 0,
+                    scale: 0 
+                  }}
+                  animate={{
+                    opacity: [0, 1, 0],
+                    scale: [0, 1, 0],
+                    y: [0, -20, -40],
+                  }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    delay: particle.delay + index * 0.2,
+                    ease: "easeOut",
+                  }}
+                />
+              ))}
+
+              {/* Central Animation for each card */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                {/* Rotating Icon Container */}
+                <motion.div
+                  className="relative mb-2"
+                  animate={{ rotate: 360 }}
+                  transition={{
+                    duration: 3,
+                    repeat: Infinity,
+                    ease: "linear",
+                    delay: index * 0.3,
+                  }}
+                >
+                  {/* Outer Ring */}
+                  <motion.div
+                    className="absolute -inset-2 rounded-full border border-white/20"
+                    animate={{
+                      scale: [1, 1.2, 1],
+                      opacity: [0.5, 0.8, 0.5],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: index * 0.2,
+                    }}
+                  />
+
+                  {/* Icon */}
+                  <motion.div
+                    className={`w-8 h-8 rounded-full bg-gradient-to-r ${currentPhaseData.color} flex items-center justify-center shadow-lg`}
+                    animate={{
+                      scale: [1, 1.1, 1],
+                      boxShadow: [
+                        "0 0 0 rgba(139, 92, 246, 0)",
+                        "0 0 15px rgba(139, 92, 246, 0.5)",
+                        "0 0 0 rgba(139, 92, 246, 0)",
+                      ],
+                    }}
+                    transition={{
+                      duration: 2,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                      delay: index * 0.1,
+                    }}
+                  >
+                    <Icon className="w-4 h-4 text-white" />
+                  </motion.div>
+                </motion.div>
+
+                {/* Generating text */}
+                <p className="text-white/60 text-xs text-center">Generating...</p>
+              </div>
+
+              {/* Shimmer Effect */}
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent transform skew-x-12"
+                animate={{
+                  x: ['-100%', '100%'],
+                }}
+                transition={{
+                  duration: 2,
+                  repeat: Infinity,
+                  ease: "linear",
+                  delay: index * 0.5,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Phase Text */}
+        <motion.div
+          key={currentPhase}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.5 }}
+          className="text-center"
+        >
+          <p className="text-white/90 font-medium text-sm">{currentPhaseData.text}</p>
+        </motion.div>
+
+        {/* Progress Dots */}
+        <div className="flex justify-center space-x-1">
+          {phases.map((_, index) => (
+            <motion.div
+              key={index}
+              className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
+                index === currentPhase ? 'bg-white' : 'bg-white/30'
+              }`}
+              animate={{
+                scale: index === currentPhase ? [1, 1.2, 1] : 1,
+              }}
+              transition={{
+                duration: 0.5,
+                repeat: index === currentPhase ? Infinity : 0,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Footer to match image collage */}
+        <div className="text-white/50 text-xs mt-2">
+          AI is crafting your images with creativity and precision...
+        </div>
+      </motion.div>
+    </AnimatePresence>
+  )
+}
+
+export default ImageGenerationAnimation
+
+=== components/typing-effect.tsx ===
+"use client"
+
+import { useState, useEffect } from "react"
+import ReactMarkdown from "react-markdown"
+
+interface TypingEffectProps {
+  text: string
+  speed?: number
+  onComplete?: () => void
+  renderers?: any
+}
+
+export default function TypingEffect({ text, speed = 10, onComplete, renderers }: TypingEffectProps) {
+  const [displayedText, setDisplayedText] = useState("")
+  const [currentIndex, setCurrentIndex] = useState(0)
+
+  useEffect(() => {
+    if (currentIndex < text.length) {
+      const timer = setTimeout(() => {
+        setDisplayedText((prev) => prev + text[currentIndex])
+        setCurrentIndex((prev) => prev + 1)
+      }, speed)
+
+      return () => clearTimeout(timer)
+    } else if (onComplete) {
+      onComplete()
+    }
+  }, [currentIndex, text, speed, onComplete])
+
+  // Reset when text changes
+  useEffect(() => {
+    setDisplayedText("")
+    setCurrentIndex(0)
+  }, [text])
+
+  return (
+    <div className="inline">
+      <ReactMarkdown components={renderers}>{displayedText}</ReactMarkdown>
+      {currentIndex < text.length && <span className="inline-block w-0.5 h-4 bg-purple-400 ml-0.5 animate-pulse" />}
+    </div>
+  )
+}
+
+=== components/api-status.tsx ===
+"use client"
+
+import { useState, useEffect } from "react"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CheckCircle, XCircle, Clock, AlertTriangle } from "lucide-react"
+
+interface ApiKeyStatus {
+  index: number
+  status: 'active' | 'failed' | 'unknown'
+  lastUsed?: Date
+  error?: string
+}
+
+export default function ApiStatus() {
+  const [apiStatuses, setApiStatuses] = useState<ApiKeyStatus[]>([
+    { index: 1, status: 'unknown' },
+    { index: 2, status: 'unknown' },
+    { index: 3, status: 'unknown' },
+    { index: 4, status: 'unknown' },
+  ])
+  
+  const [currentActiveKey, setCurrentActiveKey] = useState<number | null>(null)
+  const [isVisible, setIsVisible] = useState(false)
+
+  useEffect(() => {
+    // Listen for API key usage events from console logs
+    const originalConsoleLog = console.log
+    const originalConsoleWarn = console.warn
+    
+    console.log = (...args) => {
+      const message = args.join(' ')
+      
+      // Detect successful API key usage
+      if (message.includes('✅ Successfully used API key')) {
+        const match = message.match(/API key (\d+)/)
+        if (match) {
+          const keyIndex = parseInt(match[1])
+          setCurrentActiveKey(keyIndex)
+          setApiStatuses(prev => 
+            prev.map(status => 
+              status.index === keyIndex 
+                ? { ...status, status: 'active' as const, lastUsed: new Date() }
+                : status
+            )
+          )
+        }
+      }
+      
+      // Detect API key failures
+      if (message.includes('⚠️ Retryable error with API key')) {
+        const match = message.match(/API key (\d+)/)
+        if (match) {
+          const keyIndex = parseInt(match[1])
+          setApiStatuses(prev => 
+            prev.map(status => 
+              status.index === keyIndex 
+                ? { ...status, status: 'failed' as const, error: 'Rate limit or quota exceeded' }
+                : status
+            )
+          )
+        }
+      }
+      
+      originalConsoleLog.apply(console, args)
+    }
+    
+    console.warn = (...args) => {
+      const message = args.join(' ')
+      
+      // Detect API key failures
+      if (message.includes('API key') && message.includes('failed')) {
+        const match = message.match(/API key (\d+)/)
+        if (match) {
+          const keyIndex = parseInt(match[1])
+          setApiStatuses(prev => 
+            prev.map(status => 
+              status.index === keyIndex 
+                ? { ...status, status: 'failed' as const, error: 'API request failed' }
+                : status
+            )
+          )
+        }
+      }
+      
+      originalConsoleWarn.apply(console, args)
+    }
+    
+    return () => {
+      console.log = originalConsoleLog
+      console.warn = originalConsoleWarn
+    }
+  }, [])
+
+  const getStatusIcon = (status: ApiKeyStatus['status']) => {
+    switch (status) {
+      case 'active':
+        return <CheckCircle className="w-4 h-4 text-green-400" />
+      case 'failed':
+        return <XCircle className="w-4 h-4 text-red-400" />
+      default:
+        return <Clock className="w-4 h-4 text-gray-400" />
+    }
+  }
+
+  const getStatusColor = (status: ApiKeyStatus['status']) => {
+    switch (status) {
+      case 'active':
+        return 'bg-green-500/20 text-green-400 border-green-400/30'
+      case 'failed':
+        return 'bg-red-500/20 text-red-400 border-red-400/30'
+      default:
+        return 'bg-gray-500/20 text-gray-400 border-gray-400/30'
+    }
+  }
+
+  const hasFailures = apiStatuses.some(status => status.status === 'failed')
+  const activeKeys = apiStatuses.filter(status => status.status === 'active').length
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50">
+      <div className="flex items-center gap-2">
+        {/* Status Indicator */}
+        <div
+          className="p-2 rounded-full bg-black/20 backdrop-blur-xl border border-white/10 cursor-pointer hover:bg-black/30 transition-colors"
+          onClick={() => setIsVisible(!isVisible)}
+        >
+          {hasFailures ? (
+            <AlertTriangle className="w-5 h-5 text-yellow-400" />
+          ) : (
+            <CheckCircle className="w-5 h-5 text-green-400" />
+          )}
+        </div>
+
+        {/* Detailed Status Panel */}
+        {isVisible && (
+          <Card className="w-80 bg-black/20 backdrop-blur-xl border border-white/10 text-white">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                API Key Status
+                {currentActiveKey && (
+                  <Badge variant="secondary" className="bg-purple-500/20 text-purple-400">
+                    Using Key {currentActiveKey}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div className="text-white/60">Active Keys:</div>
+                <div className="text-green-400">{activeKeys}/4</div>
+                <div className="text-white/60">Failed Keys:</div>
+                <div className="text-red-400">{apiStatuses.filter(s => s.status === 'failed').length}/4</div>
+              </div>
+              
+              <div className="space-y-2">
+                {apiStatuses.map((status) => (
+                  <div
+                    key={status.index}
+                    className={`p-2 rounded-lg border flex items-center justify-between ${getStatusColor(status.status)}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(status.status)}
+                      <span className="font-medium">Key {status.index}</span>
+                      {status.index === currentActiveKey && (
+                        <Badge variant="secondary" className="bg-purple-500/20 text-purple-400 text-xs">
+                          Active
+                        </Badge>
+                      )}
+                    </div>
+                    {status.lastUsed && (
+                      <span className="text-xs opacity-70">
+                        {status.lastUsed.toLocaleTimeString()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {hasFailures && (
+                <div className="p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                  <p className="text-xs text-yellow-400">
+                    Some API keys are experiencing issues. Automatic fallback is active.
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
+}
+
+# END OF SOURCE CODE
+# ==================
+
+This completes the comprehensive sourcecode.txt file containing all essential files for the Luna AI Assistant project. The file includes:
+
+1. Main application files (layout, page, globals.css)
+2. Core components (home, providers, UI components)
+3. API routes for conversations and messages
+4. Utility files (schema, storage, queryClient, gemini integration)
+5. Configuration files (tailwind, next.config, package.json)
+6. Image generation and modal components
+7. Animation and typing effect components
+8. API status monitoring component
+
+To recreate the project:
+1. Create a new Next.js project with TypeScript
+2. Install dependencies from package.json
+3. Copy all files to their respective directories
+4. Replace the API keys in lib/gemini.ts with your own
+5. Run npm install and npm run dev
+
+The project features:
+- Real-time chat with Gemini AI
+- Image generation using Pollinations.ai
+- Mobile-responsive design with keyboard handling
+- Streaming responses with typing animations
+- Image upload and analysis
+- Automatic API key fallback system
+- Modern UI with glass morphism effects
